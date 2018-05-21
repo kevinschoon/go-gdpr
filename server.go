@@ -3,83 +3,61 @@ package gdpr
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
+
+	"github.com/julienschmidt/httprouter"
 )
 
-// Handler implements the business logic
+// Gdpr implements the business logic
 // for processing GDPR requests.
-type Handler interface {
+type Gdpr interface {
 	Request(Request) (Response, error)
 	Callback(CallbackRequest) error
 	Status(string) (StatusResponse, error)
 	Cancel(string) (CancellationResponse, error)
 }
 
+type Handler func(http.ResponseWriter, *http.Request, httprouter.Params) error
+
+type Builder func(Server, Gdpr) Handler
+
+type HandlerMap map[string]map[string]Builder
+
+func (hm HandlerMap) Merge(other HandlerMap) {
+	for key, methods := range other {
+		if _, ok := hm[key]; !ok {
+			hm[key] = map[string]Builder{}
+		}
+		for method, builder := range methods {
+			hm[key][method] = builder
+		}
+	}
+}
+
+func defaultHandlerMap() HandlerMap {
+	return HandlerMap{
+		"/opengdpr_requests": map[string]Builder{
+			"GET":    getRequest,
+			"POST":   postRequest,
+			"DELETE": deleteRequest,
+		},
+		"/discovery": map[string]Builder{
+			"GET": getDiscovery,
+		},
+	}
+}
+
 type ServerOptions struct {
 	Identities   []Identity
 	SubjectTypes []SubjectType
-	Handler      Handler
+	Gdpr         Gdpr
+	HandlerMap   HandlerMap
 }
 
 type Server struct {
+	router       *httprouter.Router
 	subjectTypes []SubjectType
 	identities   []Identity
-	handler      Handler
-}
-
-func (s Server) RequestGET(w http.ResponseWriter, r *http.Request) error {
-	path := strings.Split(r.URL.Path, "/")
-	if len(path) != 2 {
-		return ErrorResponse{Code: 400, Message: "no id specified"}
-	}
-	resp, err := s.handler.Status(path[1])
-	if err != nil {
-		return err
-	}
-	return json.NewEncoder(w).Encode(resp)
-}
-
-func (s Server) RequestPOST(w http.ResponseWriter, r *http.Request) error {
-	req := &Request{}
-	err := json.NewDecoder(r.Body).Decode(req)
-	if err != nil {
-		return err
-	}
-	resp, err := s.handler.Request(*req)
-	if err != nil {
-		return err
-	}
-	return json.NewEncoder(w).Encode(resp)
-}
-
-func (s Server) RequestDELETE(w http.ResponseWriter, r *http.Request) error {
-	path := strings.Split(r.URL.Path, "/")
-	if len(path) != 2 {
-		return ErrorResponse{Code: 400, Message: "no id specified"}
-	}
-	resp, err := s.handler.Cancel(path[1])
-	if err != nil {
-		return err
-	}
-	return json.NewEncoder(w).Encode(resp)
-}
-
-func (s Server) DiscoveryGET(w http.ResponseWriter, r *http.Request) error {
-	resp := DiscoveryResponse{
-		ApiVersion:                   ApiVersion,
-		SupportedSubjectRequestTypes: s.subjectTypes,
-		SupportedIdentities:          s.identities,
-	}
-	return json.NewEncoder(w).Encode(resp)
-}
-
-func (s Server) CallbackPOST(w http.ResponseWriter, r *http.Request) error {
-	req := CallbackRequest{}
-	err := json.NewDecoder(r.Body).Decode(&req)
-	if err != nil {
-		return err
-	}
-	return s.handler.Callback(req)
+	handler      Gdpr
 }
 
 func (s Server) Error(w http.ResponseWriter, err ErrorResponse) {
@@ -89,47 +67,33 @@ func (s Server) Error(w http.ResponseWriter, err ErrorResponse) {
 	json.NewEncoder(w).Encode(err)
 }
 
-func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	path := strings.Split(r.URL.Path, "/")
-	if len(path) == 0 {
-		s.Error(w, ErrorResponse{Code: 404})
-		return
-	}
-	var err error
-	switch path[0] {
-	case "/opengdpr_requests":
-		switch r.Method {
-		case "GET":
-			err = s.RequestGET(w, r)
-		case "POST":
-			err = s.RequestPOST(w, r)
-		case "DELETE":
-			err = s.RequestDELETE(w, r)
-		default:
-			err = ErrorResponse{Code: 400, Message: "unsupported method"}
-		}
-	case "/discovery":
-		switch r.Method {
-		case "GET":
-			err = s.DiscoveryGET(w, r)
-		}
-	default:
-		err = ErrorResponse{Code: 404, Message: "unknown request"}
-	}
-	if err != nil {
-		switch e := err.(type) {
-		case ErrorResponse:
-			s.Error(w, e)
-		default:
-			s.Error(w, ErrorResponse{Code: 500, Message: e.Error()})
+func (s Server) handle(fn Handler) httprouter.Handle {
+	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+		err := fn(w, r, p)
+		if err != nil {
+			s.Error(w, ErrorResponse{Message: err.Error()})
 		}
 	}
 }
 
+func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.router.ServeHTTP(w, r)
+}
+
 func NewServer(opts ServerOptions) Server {
-	return Server{
-		handler:      opts.Handler,
+	server := Server{
+		router:       httprouter.New(),
 		identities:   opts.Identities,
 		subjectTypes: opts.SubjectTypes,
 	}
+	hm := defaultHandlerMap()
+	if opts.HandlerMap != nil {
+		hm.Merge(opts.HandlerMap)
+	}
+	for path, methods := range hm {
+		for method, builder := range methods {
+			server.router.Handle(method, path, server.handle(builder(server, opts.Gdpr)))
+		}
+	}
+	return server
 }

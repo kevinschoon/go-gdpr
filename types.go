@@ -16,22 +16,102 @@ func (s SubjectType) Valid() bool {
 	return ok
 }
 
+func (s *SubjectType) UnmarshalJSON(raw []byte) error {
+	if _, ok := SubjectTypeMap[string(raw)]; !ok {
+		return fmt.Errorf("bad subject type: %s", string(raw))
+	}
+	*s = SubjectType(string(raw))
+	return nil
+}
+
 const (
-	ACCESS      = SubjectType("access")
-	PORTABILITY = SubjectType("portability")
-	ERASURE     = SubjectType("erasure")
+	SUBJECT_ACCESS      = SubjectType("access")
+	SUBJECT_PORTABILITY = SubjectType("portability")
+	SUBJECT_ERASURE     = SubjectType("erasure")
 )
 
 var SubjectTypeMap = map[string]SubjectType{
-	"access":      ACCESS,
-	"portability": PORTABILITY,
-	"erasure":     ERASURE,
+	"access":      SUBJECT_ACCESS,
+	"portability": SUBJECT_PORTABILITY,
+	"erasure":     SUBJECT_ERASURE,
+}
+
+type IdentityType string
+
+const (
+	IDENTITY_CONTROLLER_CUSTOMER_ID   = IdentityType("controller_customer_id")
+	IDENTITY_ANDROID_ADVERTISING_ID   = IdentityType("android_advertising_id")
+	IDENTITY_ANDROID_ID               = IdentityType("android_id")
+	IDENTITY_EMAIL                    = IdentityType("email")
+	IDENTITY_FIRE_ADVERTISING_ID      = IdentityType("fire_advertising_id")
+	IDENTITY_IOS_ADVERTISING_ID       = IdentityType("ios_advertising_id")
+	IDENTITY_IOS_VENDOR_ID            = IdentityType("ios_vendor_id")
+	IDENTITY_MICROSOFT_ADVERTISING_ID = IdentityType("microsoft_advertising_id")
+	IDENTITY_MICROSOFT_PUBLISHER_ID   = IdentityType("microsoft_publisher_id")
+	IDENTITY_ROKU_PUBLISHER_ID        = IdentityType("roku_publisher_id")
+	IDENTITY_ROKU_ADVERTISING_ID      = IdentityType("roku_advertising_id")
+)
+
+func (i IdentityType) Valid() bool {
+	_, ok := IdentityTypeMap[string(i)]
+	return ok
+}
+
+func (i *IdentityType) UnmarshalJSON(raw []byte) error {
+	if _, ok := IdentityTypeMap[string(raw)]; !ok {
+		return fmt.Errorf("bad identity type: %s", string(raw))
+	}
+	*i = IdentityType(string(raw))
+	return nil
+}
+
+var IdentityTypeMap = map[string]IdentityType{
+	"controller_customer_id":   IDENTITY_CONTROLLER_CUSTOMER_ID,
+	"android_advertising_id":   IDENTITY_ANDROID_ADVERTISING_ID,
+	"android_id":               IDENTITY_ANDROID_ID,
+	"email":                    IDENTITY_EMAIL,
+	"fire_advertising_id":      IDENTITY_FIRE_ADVERTISING_ID,
+	"ios_advertising_id":       IDENTITY_IOS_ADVERTISING_ID,
+	"ios_vendor_id":            IDENTITY_IOS_VENDOR_ID,
+	"microsoft_advertising_id": IDENTITY_MICROSOFT_ADVERTISING_ID,
+	"microsoft_publisher_id":   IDENTITY_MICROSOFT_PUBLISHER_ID,
+	"roku_publisher_id":        IDENTITY_ROKU_PUBLISHER_ID,
+	"roku_advertising_id":      IDENTITY_ROKU_ADVERTISING_ID,
+}
+
+type IdentityFormat string
+
+const (
+	FORMAT_RAW    = IdentityFormat("raw")
+	FORMAT_SHA1   = IdentityFormat("sha1")
+	FORMAT_MD5    = IdentityFormat("md5")
+	FORMAT_SHA256 = IdentityFormat("sha256")
+)
+
+var IdentityFormatMap = map[string]IdentityFormat{
+	"raw":    FORMAT_RAW,
+	"sha1":   FORMAT_SHA1,
+	"md5":    FORMAT_MD5,
+	"sha256": FORMAT_SHA256,
+}
+
+func (i IdentityFormat) Valid() bool {
+	_, ok := IdentityFormatMap[string(i)]
+	return ok
+}
+
+func (i *IdentityFormat) UnmarshalJSON(raw []byte) error {
+	if _, ok := IdentityFormatMap[string(raw)]; !ok {
+		return fmt.Errorf("bad identity format: %s", string(raw))
+	}
+	*i = IdentityFormat(string(raw))
+	return nil
 }
 
 type Identity struct {
-	Type   string `json:"identity_type"`
-	Format string `json:"identity_format"`
-	Value  string `json:"value"`
+	Type   IdentityType   `json:"identity_type"`
+	Format IdentityFormat `json:"identity_format"`
+	Value  string         `json:"identity_value"`
 }
 
 /*
@@ -135,28 +215,6 @@ type DiscoveryResponse struct {
 	SupportedIdentities          []Identity    `json:"supported_identities"`
 	SupportedSubjectRequestTypes []SubjectType `json:"supported_subject_request_types"`
 	ProcessorCertificate         string        `json:"processor_certificate"`
-}
-
-func (r *DiscoveryResponse) UnmarshalJSON(raw []byte) error {
-	err := json.Unmarshal(raw, r)
-	if err != nil {
-		return err
-	}
-	for _, rt := range r.SupportedSubjectRequestTypes {
-		if !rt.Valid() {
-			return ErrorResponse{Code: 400, Message: fmt.Sprintf("bad subject type: %s", rt)}
-		}
-	}
-	return nil
-}
-
-func (r DiscoveryResponse) MarshalJSON() ([]byte, error) {
-	for _, rt := range r.SupportedSubjectRequestTypes {
-		if !rt.Valid() {
-			return nil, ErrorResponse{Code: 400, Message: fmt.Sprintf("bad subject type: %s", rt)}
-		}
-	}
-	return json.Marshal(r)
 }
 
 /*
