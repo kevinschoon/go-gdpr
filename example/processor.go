@@ -78,8 +78,8 @@ func (p *Processor) Process() error {
 	for _, request := range pending {
 		// TODO: Process Requests Here!
 		go func(request *dbState) {
-			cbReq := gdpr.CallbackRequest{}
-			err = gdpr.Callback(cbReq, gdpr.CallbackOptions{
+			cbReq := &gdpr.CallbackRequest{}
+			err = gdpr.Callback(cbReq, &gdpr.CallbackOptions{
 				MaxAttempts:     3,
 				ProcessorDomain: p.domain,
 				Backoff:         5 * time.Second,

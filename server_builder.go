@@ -9,7 +9,7 @@ import (
 
 // opengdpr_requests
 
-func getRequest(opts ServerOptions) Handler {
+func getRequest(opts *ServerOptions) Handler {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
 		resp, err := opts.Processor.Status(p.ByName("id"))
 		if err != nil {
@@ -19,7 +19,7 @@ func getRequest(opts ServerOptions) Handler {
 	}
 }
 
-func postRequest(opts ServerOptions) Handler {
+func postRequest(opts *ServerOptions) Handler {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
 		req := &Request{}
 		err := json.NewDecoder(r.Body).Decode(req)
@@ -35,7 +35,7 @@ func postRequest(opts ServerOptions) Handler {
 	}
 }
 
-func deleteRequest(opts ServerOptions) Handler {
+func deleteRequest(opts *ServerOptions) Handler {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
 		resp, err := opts.Processor.Cancel(p.ByName("id"))
 		if err != nil {
@@ -47,7 +47,7 @@ func deleteRequest(opts ServerOptions) Handler {
 
 // discovery
 
-func getDiscovery(opts ServerOptions) Handler {
+func getDiscovery(opts *ServerOptions) Handler {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
 		resp := DiscoveryResponse{
 			ApiVersion:                   ApiVersion,

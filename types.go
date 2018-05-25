@@ -11,6 +11,8 @@ import (
 
 const ApiVersion = "0.1"
 
+// SubjectType is the type of request
+// that is being made.
 type SubjectType string
 
 func (s SubjectType) Valid() bool {
@@ -113,6 +115,7 @@ func (i *IdentityFormat) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
+// RequestStatus represents the status of a GDPR request
 type RequestStatus string
 
 const (
@@ -149,6 +152,7 @@ type Identity struct {
 	Value  string         `json:"identity_value,omitempty"`
 }
 
+// Request represents a GDPR request
 type Request struct {
 	SubjectRequestId   string      `json:"subject_request_id"`
 	SubjectRequestType SubjectType `json:"subject_request_type"`

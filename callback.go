@@ -8,14 +8,23 @@ import (
 	"time"
 )
 
+// CallBackOptions configure an HTTP callback
 type CallbackOptions struct {
 	MaxAttempts     int
 	Backoff         time.Duration
 	ProcessorDomain string
 	Signature       string
+	Client          *http.Client
 }
 
-func Callback(cbReq CallbackRequest, opts CallbackOptions) error {
+// Callback sends the CallbackRequest type to the configured
+// StatusCallbackUrl. If it fails to deliver in n attempts or
+// the request is invalid it will return an error.
+func Callback(cbReq *CallbackRequest, opts *CallbackOptions) error {
+	client := opts.Client
+	if client == nil {
+		client = http.DefaultClient
+	}
 	buf := bytes.NewBuffer(nil)
 	err := json.NewEncoder(buf).Encode(cbReq)
 	if err != nil {
@@ -29,7 +38,7 @@ func Callback(cbReq CallbackRequest, opts CallbackOptions) error {
 	req.Header.Set("X-OpenGDPR-Signature", opts.Signature)
 	// Attempt to make callback
 	for i := 0; i < opts.MaxAttempts; i++ {
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := client.Do(req)
 		if err != nil || resp.StatusCode != 200 {
 			time.Sleep(opts.Backoff)
 			continue

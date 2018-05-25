@@ -30,7 +30,7 @@ func main() {
 	proc := &Processor{
 		db: db,
 	}
-	svr := gdpr.NewServer(gdpr.ServerOptions{
+	svr := gdpr.NewServer(&gdpr.ServerOptions{
 		ProcessorDomain: *processorDomain,
 		Processor:       proc,
 		Identities: []gdpr.Identity{

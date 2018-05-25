@@ -7,20 +7,33 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
-// Processor implements the business logic
-// for processing GDPR requests.
+// Processor implements the business logic for processing GDPR requests.
+// The Processor interface is intended to be wrapped by the Server type
+// and provide an HTTP REST server. Any method may return an ErrorResponse
+// type which will be serialized as JSON and handled in accordance to
+// the OpenGDPR specification.
 type Processor interface {
+	// Request accepts an incoming Request type
+	// and is expected to process it in some way.
 	Request(*Request) (*Response, error)
-	Status(string) (*StatusResponse, error)
-	Cancel(string) (*CancellationResponse, error)
+	// Status validates the status of an existing
+	// request sent to this processor.
+	Status(id string) (*StatusResponse, error)
+	// Cancel prevents any further processing of
+	// the Request.
+	Cancel(id string) (*CancellationResponse, error)
 }
 
+// Handler satisfies an incoming HTTP request.
 type Handler func(http.ResponseWriter, *http.Request, httprouter.Params) error
 
-type Builder func(opts ServerOptions) Handler
+// Builder is a functional option to construct a Handler.
+type Builder func(opts *ServerOptions) Handler
 
+// HandlerMap is a map of route/methods to Builder.
 type HandlerMap map[string]map[string]Builder
 
+// Merge merges another HandlerMap into itself.
 func (hm HandlerMap) Merge(other HandlerMap) {
 	for key, methods := range other {
 		if _, ok := hm[key]; !ok {
@@ -47,6 +60,8 @@ func defaultHandlerMap() HandlerMap {
 	}
 }
 
+// ServerOptions contains configuration options that
+// effect the operation of the HTTP server.
 type ServerOptions struct {
 	Identities      []Identity
 	SubjectTypes    []SubjectType
@@ -55,15 +70,13 @@ type ServerOptions struct {
 	ProcessorDomain string
 }
 
+// Server provides HTTP access to an underlying Processor.
 type Server struct {
 	router          *httprouter.Router
-	subjectTypes    []SubjectType
-	identities      []Identity
-	handler         Processor
 	processorDomain string
 }
 
-func (s Server) Error(w http.ResponseWriter, err ErrorResponse) {
+func (s Server) error(w http.ResponseWriter, err ErrorResponse) {
 	w.Header().Set("Content Type", "application/json")
 	w.Header().Set("Cache Control", "no store")
 	w.WriteHeader(err.Code)
@@ -76,9 +89,9 @@ func (s Server) handle(fn Handler) httprouter.Handle {
 		err := fn(w, r, p)
 		if err != nil {
 			if e, ok := err.(ErrorResponse); ok {
-				s.Error(w, e)
+				s.error(w, e)
 			} else {
-				s.Error(w, ErrorResponse{Message: err.Error(), Code: 500})
+				s.error(w, ErrorResponse{Message: err.Error(), Code: 500})
 			}
 		}
 	}
@@ -86,11 +99,11 @@ func (s Server) handle(fn Handler) httprouter.Handle {
 
 func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.router.ServeHTTP(w, r) }
 
-func NewServer(opts ServerOptions) Server {
-	server := Server{
+// NewServer returns a server type that statisfies the
+// http.Handler interface.
+func NewServer(opts *ServerOptions) *Server {
+	server := &Server{
 		router:          httprouter.New(),
-		identities:      opts.Identities,
-		subjectTypes:    opts.SubjectTypes,
 		processorDomain: opts.ProcessorDomain,
 	}
 	hm := defaultHandlerMap()
