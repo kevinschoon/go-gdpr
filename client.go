@@ -76,15 +76,6 @@ func (c Client) Discovery() (DiscoveryResponse, error) {
 	return resp, c.json(c.req("GET", c.endpoint+"/discovery", nil), &resp)
 }
 
-func (c Client) Callback(req CallbackRequest) error {
-	buf := bytes.NewBuffer(nil)
-	err := json.NewEncoder(buf).Encode(req)
-	if err != nil {
-		return err
-	}
-	return c.json(c.req("POST", c.endpoint+"/opengdpr_callbacks", buf), nil)
-}
-
 func NewClient(opts ClientOptions) Client {
 	return Client{
 		cli: &http.Client{

@@ -9,9 +9,9 @@ import (
 
 // opengdpr_requests
 
-func getRequest(s Server, g Gdpr) Handler {
+func getRequest(opts ServerOptions) Handler {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
-		resp, err := g.Status(p.ByName("id"))
+		resp, err := opts.Processor.Status(p.ByName("id"))
 		if err != nil {
 			return err
 		}
@@ -19,24 +19,25 @@ func getRequest(s Server, g Gdpr) Handler {
 	}
 }
 
-func postRequest(s Server, g Gdpr) Handler {
+func postRequest(opts ServerOptions) Handler {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
 		req := &Request{}
 		err := json.NewDecoder(r.Body).Decode(req)
 		if err != nil {
 			return err
 		}
-		resp, err := g.Request(*req)
+		resp, err := opts.Processor.Request(req)
 		if err != nil {
 			return err
 		}
+		w.Header().Add("X-OpenGDPR-Signature", req.Signature())
 		return json.NewEncoder(w).Encode(resp)
 	}
 }
 
-func deleteRequest(s Server, g Gdpr) Handler {
+func deleteRequest(opts ServerOptions) Handler {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
-		resp, err := g.Cancel(p.ByName("id"))
+		resp, err := opts.Processor.Cancel(p.ByName("id"))
 		if err != nil {
 			return err
 		}
@@ -46,26 +47,13 @@ func deleteRequest(s Server, g Gdpr) Handler {
 
 // discovery
 
-func getDiscovery(s Server, g Gdpr) Handler {
+func getDiscovery(opts ServerOptions) Handler {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
 		resp := DiscoveryResponse{
 			ApiVersion:                   ApiVersion,
-			SupportedSubjectRequestTypes: s.subjectTypes,
-			SupportedIdentities:          s.identities,
+			SupportedSubjectRequestTypes: opts.SubjectTypes,
+			SupportedIdentities:          opts.Identities,
 		}
 		return json.NewEncoder(w).Encode(resp)
-	}
-}
-
-// callback
-
-func postCallback(s Server, g Gdpr) Handler {
-	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
-		req := CallbackRequest{}
-		err := json.NewDecoder(r.Body).Decode(&req)
-		if err != nil {
-			return err
-		}
-		return g.Callback(req)
 	}
 }

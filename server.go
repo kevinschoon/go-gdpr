@@ -7,18 +7,17 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
-// Gdpr implements the business logic
+// Processor implements the business logic
 // for processing GDPR requests.
-type Gdpr interface {
-	Request(Request) (Response, error)
-	Callback(CallbackRequest) error
-	Status(string) (StatusResponse, error)
-	Cancel(string) (CancellationResponse, error)
+type Processor interface {
+	Request(*Request) (*Response, error)
+	Status(string) (*StatusResponse, error)
+	Cancel(string) (*CancellationResponse, error)
 }
 
 type Handler func(http.ResponseWriter, *http.Request, httprouter.Params) error
 
-type Builder func(Server, Gdpr) Handler
+type Builder func(opts ServerOptions) Handler
 
 type HandlerMap map[string]map[string]Builder
 
@@ -35,10 +34,12 @@ func (hm HandlerMap) Merge(other HandlerMap) {
 
 func defaultHandlerMap() HandlerMap {
 	return HandlerMap{
-		"/opengdpr_requests": map[string]Builder{
+		"/opengdpr_requests/:id": map[string]Builder{
 			"GET":    getRequest,
-			"POST":   postRequest,
 			"DELETE": deleteRequest,
+		},
+		"/opengdpr_requests": map[string]Builder{
+			"POST": postRequest,
 		},
 		"/discovery": map[string]Builder{
 			"GET": getDiscovery,
@@ -47,17 +48,19 @@ func defaultHandlerMap() HandlerMap {
 }
 
 type ServerOptions struct {
-	Identities   []Identity
-	SubjectTypes []SubjectType
-	Gdpr         Gdpr
-	HandlerMap   HandlerMap
+	Identities      []Identity
+	SubjectTypes    []SubjectType
+	Processor       Processor
+	HandlerMap      HandlerMap
+	ProcessorDomain string
 }
 
 type Server struct {
-	router       *httprouter.Router
-	subjectTypes []SubjectType
-	identities   []Identity
-	handler      Gdpr
+	router          *httprouter.Router
+	subjectTypes    []SubjectType
+	identities      []Identity
+	handler         Processor
+	processorDomain string
 }
 
 func (s Server) Error(w http.ResponseWriter, err ErrorResponse) {
@@ -69,22 +72,26 @@ func (s Server) Error(w http.ResponseWriter, err ErrorResponse) {
 
 func (s Server) handle(fn Handler) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+		w.Header().Set("X-OpenGDPR-ProcessorDomain", s.processorDomain)
 		err := fn(w, r, p)
 		if err != nil {
-			s.Error(w, ErrorResponse{Message: err.Error()})
+			if e, ok := err.(ErrorResponse); ok {
+				s.Error(w, e)
+			} else {
+				s.Error(w, ErrorResponse{Message: err.Error(), Code: 500})
+			}
 		}
 	}
 }
 
-func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	s.router.ServeHTTP(w, r)
-}
+func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.router.ServeHTTP(w, r) }
 
 func NewServer(opts ServerOptions) Server {
 	server := Server{
-		router:       httprouter.New(),
-		identities:   opts.Identities,
-		subjectTypes: opts.SubjectTypes,
+		router:          httprouter.New(),
+		identities:      opts.Identities,
+		subjectTypes:    opts.SubjectTypes,
+		processorDomain: opts.ProcessorDomain,
 	}
 	hm := defaultHandlerMap()
 	if opts.HandlerMap != nil {
@@ -92,7 +99,7 @@ func NewServer(opts ServerOptions) Server {
 	}
 	for path, methods := range hm {
 		for method, builder := range methods {
-			server.router.Handle(method, path, server.handle(builder(server, opts.Gdpr)))
+			server.router.Handle(method, path, server.handle(builder(opts)))
 		}
 	}
 	return server
