@@ -9,6 +9,26 @@ import (
 	"net/http"
 )
 
+type caller interface {
+	Call(string, string, io.Reader) (*http.Response, error)
+}
+
+type defaultCaller struct {
+	client  *http.Client
+	headers map[string]string
+}
+
+func (d defaultCaller) Call(method, url string, body io.Reader) (*http.Response, error) {
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return nil, err
+	}
+	for key, value := range d.headers {
+		req.Header.Set(key, value)
+	}
+	return d.client.Do(req)
+}
+
 // ClientOptions conifigure a Client.
 type ClientOptions struct {
 	Endpoint string
@@ -18,25 +38,11 @@ type ClientOptions struct {
 // Client is an HTTP helper client for making requests
 // to an OpenGDPR processor server.
 type Client struct {
-	client   *http.Client
 	endpoint string
-	headers  map[string]string
+	caller   caller
 }
 
-func (c *Client) req(method, url string, body io.Reader) *http.Request {
-	req, err := http.NewRequest(method, url, body)
-	if err != nil {
-		panic(err)
-	}
-	for key, value := range c.headers {
-		req.Header.Set(key, value)
-	}
-	return req
-}
-
-func (c *Client) json(r *http.Request, v interface{}) error {
-	r.Header.Add("Content-Type", "Application/JSON")
-	resp, err := c.client.Do(r)
+func (c *Client) json(resp *http.Response, err error, v interface{}) error {
 	if err != nil {
 		return err
 	}
@@ -68,39 +74,47 @@ func (c *Client) Request(req *Request) (*Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp := &Response{}
-	return resp, c.json(c.req("POST", c.endpoint+"/opengdpr_requests", buf), resp)
+	reqResp := &Response{}
+	resp, err := c.caller.Call("POST", c.endpoint+"/opengdpr_requests", buf)
+	return reqResp, c.json(resp, err, reqResp)
 }
 
 // Status checks the status of an existing GDPR request.
 func (c *Client) Status(id string) (*StatusResponse, error) {
-	resp := &StatusResponse{}
-	return resp, c.json(c.req("GET", c.endpoint+"/opengdpr_requests/"+id, nil), resp)
+	statResp := &StatusResponse{}
+	resp, err := c.caller.Call("GET", c.endpoint+"/opengdpr_requests/"+id, nil)
+	return statResp, c.json(resp, err, statResp)
 }
 
 // Cancel cancels an existing GDPR request.
 func (c *Client) Cancel(id string) (*CancellationResponse, error) {
-	resp := &CancellationResponse{}
-	return resp, c.json(c.req("DELETE", c.endpoint+"/opengdpr_requests/"+id, nil), resp)
+	cancelResp := &CancellationResponse{}
+	resp, err := c.caller.Call("DELETE", c.endpoint+"/opengdpr_requests/"+id, nil)
+	return cancelResp, c.json(resp, err, cancelResp)
 }
 
 // Discovery describes the remote OpenGDPR speciication.
 func (c *Client) Discovery() (*DiscoveryResponse, error) {
-	resp := &DiscoveryResponse{}
-	return resp, c.json(c.req("GET", c.endpoint+"/discovery", nil), resp)
+	discResp := &DiscoveryResponse{}
+	resp, err := c.caller.Call("GET", c.endpoint+"/discovery", nil)
+	return discResp, c.json(resp, err, discResp)
 }
 
 // NewClient returns a new OpenGDPR client.
 func NewClient(opts *ClientOptions) *Client {
-	client := &Client{
-		client:   opts.Client,
-		endpoint: opts.Endpoint,
-		headers: map[string]string{
-			"GDPR Version": ApiVersion,
-		},
+	cli := opts.Client
+	if cli == nil {
+		cli = http.DefaultClient
 	}
-	if client.client == nil {
-		client.client = http.DefaultClient
+	client := &Client{
+		caller: &defaultCaller{
+			client: cli,
+			headers: map[string]string{
+				"GDPR Version": ApiVersion,
+				"Content-Type": "Application/JSON",
+			},
+		},
+		endpoint: opts.Endpoint,
 	}
 	return client
 }
