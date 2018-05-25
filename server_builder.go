@@ -20,11 +20,15 @@ func getRequest(opts *ServerOptions) Handler {
 }
 
 func postRequest(opts *ServerOptions) Handler {
+	supported := SupportedFunc(opts)
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
 		req := &Request{}
 		err := json.NewDecoder(r.Body).Decode(req)
 		if err != nil {
 			return err
+		}
+		if !supported(req) {
+			return Unsupported(req.SubjectRequestId)
 		}
 		resp, err := opts.Processor.Request(req)
 		if err != nil {

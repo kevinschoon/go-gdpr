@@ -7,5 +7,4 @@ import (
 type mockHandler struct{}
 
 func TestServer(t *testing.T) {
-
 }
