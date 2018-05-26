@@ -103,7 +103,7 @@ func TestServerRequest(t *testing.T) {
 	w := httptest.NewRecorder()
 	server.ServeHTTP(w, r)
 	t.Log(w.Body.String())
-	assert.Equal(t, 200, w.Code)
+	assert.Equal(t, 201, w.Code)
 	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
 	assert.Equal(t, "application/json", w.Header().Get("Accept"))
 	resp := &Response{}
