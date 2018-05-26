@@ -20,15 +20,15 @@ func getRequest(opts *ServerOptions) Handler {
 }
 
 func postRequest(opts *ServerOptions) Handler {
-	supported := SupportedFunc(opts)
+	validate := ValidateRequest(opts)
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
 		req := &Request{}
 		err := json.NewDecoder(r.Body).Decode(req)
 		if err != nil {
 			return err
 		}
-		if !supported(req) {
-			return Unsupported(req.SubjectRequestId)
+		if err := validate(req); err != nil {
+			return err
 		}
 		resp, err := opts.Processor.Request(req)
 		if err != nil {

@@ -4,18 +4,30 @@ import (
 	"fmt"
 )
 
-// NotFound indicates no request exists
-// for the given ID.
-func NotFound(id string) error {
+func ErrNotFound(id string) error {
 	return ErrorResponse{
 		Code:    404,
 		Message: fmt.Sprintf("request %s not found", id),
 	}
 }
 
-func Unsupported(id string) error {
+func ErrUnsupportedRequestType(st SubjectType) error {
+	return ErrorResponse{
+		Code:    501,
+		Message: fmt.Sprintf("unsupported request type: %s", st),
+	}
+}
+
+func ErrUnsupportedIdentity(id Identity) error {
+	return ErrorResponse{
+		Code:    501,
+		Message: fmt.Sprintf("unsupported identity: %s/%s", id.Type, id.Format),
+	}
+}
+
+func ErrMissingRequiredField(field string) error {
 	return ErrorResponse{
 		Code:    400,
-		Message: fmt.Sprintf("request %s cannot be supported by the server", id),
+		Message: fmt.Sprintf("missing required field: %s", field),
 	}
 }
