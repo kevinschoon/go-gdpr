@@ -1,8 +1,7 @@
 # go-gdpr
+[![GoDoc](https://godoc.org/github.com/greencase/go-gdpr?status.svg)](https://godoc.org/github.com/greencase/go-gdpr)
 
-`go-gdpr` is an experimental implementation of the [OpenGDPR](https://www.opengdpr.org) specification for use with the EU [GDPR](https://www.eugdpr.org/) regulation. **Disclaimer: Using this library does not imply accordance with GDPR!**
-
-`go-gdpr` is intended to be consumed as a library to aid in the processing of HTTP requests based on the OpenGDPR standard.
+`go-gdpr` is an experimental implementation of the [OpenGDPR](https://www.opengdpr.org) specification for use with the EU [GDPR](https://www.eugdpr.org/) regulation. **Disclaimer: Using this library does not imply accordance with GDPR!** This project is intended to be consumed as a library to aid in the processing of HTTP requests based on the OpenGDPR standard.
 
 ## Installation
 
@@ -13,7 +12,59 @@
 
 The primary use case for `go-gdpr` is wrapping business logic via the `Processor` interface with the `Server` type. There is an additional `Client` which allows the consumer to access the processor via HTTP. `go-gdpr` may also be useful by providing static typs for OpenGDPR.
 
-### Example Processor
+### Simple Processor Example
+
+    package main
+
+    import (
+        "fmt"
+        "github.com/greencase/go-gdpr"
+        "net/http"
+        "os"
+    )
+
+    type Processor struct{}
+
+    func (p *Processor) Request(req *gdpr.Request) (*gdpr.Response, error) {
+        // Process the request..
+        return nil, nil
+    }
+
+    func (p *Processor) Status(id string) (*gdpr.StatusResponse, error) {
+        // Check the status of the request..
+        return nil, nil
+    }
+
+    func (p *Processor) Cancel(id string) (*gdpr.CancellationResponse, error) {
+        // Cancel the request..
+        return nil, nil
+    }
+
+    func main() {
+        server := gdpr.NewServer(&gdpr.ServerOptions{
+            ProcessorDomain: "my-processor-domain.com",
+            Processor:       &Processor{},
+            Identities: []gdpr.Identity{
+                gdpr.Identity{
+                    Type:   gdpr.IDENTITY_EMAIL,
+                    Format: gdpr.FORMAT_RAW,
+                },
+            },
+            SubjectTypes: []gdpr.SubjectType{
+                gdpr.SUBJECT_ACCESS,
+                gdpr.SUBJECT_ERASURE,
+                gdpr.SUBJECT_PORTABILITY,
+            },
+        })
+        err := http.ListenAndServe(":4000", server)
+        if err != nil {
+            fmt.Println("Error: ", err)
+            os.Exit(1)
+        }
+    }
+
+
+### Stateful Processor Example
 
 The `example` package implements an OpenGDPR processor backed with a SQLite database. It launches a go-gdpr `Server` in a separate Go routine and then polls the database for new requests in the `STATUS_PENDING` state. Note that this technique is not particularly efficient and in a production deployment one would likely prefer a message queue. 
 
@@ -49,14 +100,26 @@ Make a new GDPR request to the processor:
     curl -v localhost:4000/opengdpr_requests/1234
 
     ...
-    {"controller_id":"","expected_completion_time":"2018-05-26T16:36:34.075892734+01:00","subject_request_id":"1234","request_status":"completed","api_version":"0.1","results_url":""}
+            {
+                "controller_id":"",
+                "expected_completion_time":"2018-05-26T16:36:34.075892734+01:00",
+                "subject_request_id":"1234",
+                "request_status":"completed",
+                "api_version":"0.1",
+                "results_url":""
+            }
 
     # Cancel the request
 
     curl -X DELETE localhost:4000/opengdpr_requests/1234
 
     ...
-    {"controller_id":"","subject_request_id":"1234","ReceivedTime":"2018-05-26T16:36:29.075892545+01:00","encoded_request":"eyJzdWJqZWN0X3JlcXVlc3RfaWQiOiIxMjM0Iiwic3ViamVjdF9yZXF1ZXN0X3R5cGUiOiJlcmFzdXJlIiwic3VibWl0dGVkX3RpbWUiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiIsImFwaV92ZXJzaW9uIjoiIiwic3RhdHVzX2NhbGxiYWNrX3VybHMiOm51bGwsInN1YmplY3RfaWRlbnRpdGllcyI6W3siaWRlbnRpdHlfdHlwZSI6ImVtYWlsIiwiaWRlbnRpdHlfZm9ybWF0IjoicmF3In1dLCJleHRlbnNpb25zIjpudWxsfQ==","api_version":"0.1"}
+        {
+        "controller_id":"",
+        "subject_request_id":"1234",
+        "ReceivedTime":"2018-05-26T16:36:29.075892545+01:00",
+        "encoded_request":"eyJzdWJqZWN0X3JlcXVlc3RfaWQiOiIxMjM0Iiwic3ViamVjdF9yZXF1ZXN0X3R5cGUiOiJlcmFzdXJlIiwic3VibWl0dGVkX3RpbWUiOiIwMDAxLTAxLTAxVDAwOjAwOjAwWiIsImFwaV92ZXJzaW9uIjoiIiwic3RhdHVzX2NhbGxiYWNrX3VybHMiOm51bGwsInN1YmplY3RfaWRlbnRpdGllcyI6W3siaWRlbnRpdHlfdHlwZSI6ImVtYWlsIiwiaWRlbnRpdHlfZm9ybWF0IjoicmF3In1dLCJleHRlbnNpb25zIjpudWxsfQ==",
+        "api_version":"0.1"}
 
 
 Callback requests are also honored:
