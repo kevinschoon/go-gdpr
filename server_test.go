@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-var mockResponseBody = []byte(`
+var mockRequestBody = []byte(`
 {
   "subject_request_id": "a7551968-d5d6-44b2-9831-815ac9017798",
   "subject_request_type": "erasure",
@@ -44,10 +44,23 @@ type mockProcessor struct {
 	err                  error
 }
 
-func (m mockProcessor) Request(req *Request) (*Response, error)   { return m.response, m.err }
-func (m mockProcessor) Status(id string) (*StatusResponse, error) { return m.statusResponse, m.err }
+func (m mockProcessor) Request(req *Request) (*Response, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.response, nil
+}
+func (m mockProcessor) Status(id string) (*StatusResponse, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.statusResponse, nil
+}
 func (m mockProcessor) Cancel(id string) (*CancellationResponse, error) {
-	return m.cancellationResponse, m.err
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.cancellationResponse, nil
 }
 
 func newServer() (*Server, *mockProcessor) {
@@ -84,24 +97,9 @@ func newServer() (*Server, *mockProcessor) {
 	}), proc
 }
 
-func TestServerDiscovery(t *testing.T) {
-	server, _ := newServer()
-	r := httptest.NewRequest("GET", "/discovery", bytes.NewBuffer(mockResponseBody))
-	w := httptest.NewRecorder()
-	server.ServeHTTP(w, r)
-	t.Log(w.Body.String())
-	assert.Equal(t, 200, w.Code)
-	resp := &DiscoveryResponse{}
-	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), resp))
-	assert.Equal(t, SUBJECT_ERASURE, resp.SupportedSubjectRequestTypes[0])
-	assert.Equal(t, IDENTITY_EMAIL, resp.SupportedIdentities[0].Type)
-	assert.Equal(t, FORMAT_RAW, resp.SupportedIdentities[0].Format)
-	assert.Equal(t, ApiVersion, resp.ApiVersion)
-}
-
 func TestServerRequest(t *testing.T) {
 	server, _ := newServer()
-	r := httptest.NewRequest("POST", "/opengdpr_requests", bytes.NewBuffer(mockResponseBody))
+	r := httptest.NewRequest("POST", "/opengdpr_requests", bytes.NewBuffer(mockRequestBody))
 	w := httptest.NewRecorder()
 	server.ServeHTTP(w, r)
 	t.Log(w.Body.String())
@@ -114,7 +112,7 @@ func TestServerRequest(t *testing.T) {
 
 func TestServerStatus(t *testing.T) {
 	server, _ := newServer()
-	r := httptest.NewRequest("GET", "/opengdpr_requests/1234", bytes.NewBuffer(mockResponseBody))
+	r := httptest.NewRequest("GET", "/opengdpr_requests/1234", nil)
 	w := httptest.NewRecorder()
 	server.ServeHTTP(w, r)
 	t.Log(w.Body.String())
@@ -127,7 +125,7 @@ func TestServerStatus(t *testing.T) {
 
 func TestServerCancel(t *testing.T) {
 	server, _ := newServer()
-	r := httptest.NewRequest("DELETE", "/opengdpr_requests/1234", bytes.NewBuffer(mockResponseBody))
+	r := httptest.NewRequest("DELETE", "/opengdpr_requests/1234", nil)
 	w := httptest.NewRecorder()
 	server.ServeHTTP(w, r)
 	t.Log(w.Body.String())
@@ -138,10 +136,25 @@ func TestServerCancel(t *testing.T) {
 	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), resp))
 }
 
+func TestServerDiscovery(t *testing.T) {
+	server, _ := newServer()
+	r := httptest.NewRequest("GET", "/discovery", nil)
+	w := httptest.NewRecorder()
+	server.ServeHTTP(w, r)
+	t.Log(w.Body.String())
+	assert.Equal(t, 200, w.Code)
+	resp := &DiscoveryResponse{}
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), resp))
+	assert.Equal(t, SUBJECT_ERASURE, resp.SupportedSubjectRequestTypes[0])
+	assert.Equal(t, IDENTITY_EMAIL, resp.SupportedIdentities[0].Type)
+	assert.Equal(t, FORMAT_RAW, resp.SupportedIdentities[0].Format)
+	assert.Equal(t, ApiVersion, resp.ApiVersion)
+}
+
 func TestServerError(t *testing.T) {
 	server, proc := newServer()
-	proc.err = ErrorResponse{Code: 501, Message: "Oh No!"}
-	r := httptest.NewRequest("GET", "/opengdpr_requests/1234", bytes.NewBuffer(mockResponseBody))
+	proc.err = &ErrorResponse{Code: 501, Message: "Oh No!"}
+	r := httptest.NewRequest("GET", "/opengdpr_requests/1234", nil)
 	w := httptest.NewRecorder()
 	server.ServeHTTP(w, r)
 	t.Log(w.Body.String())

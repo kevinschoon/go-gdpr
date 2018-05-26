@@ -199,10 +199,50 @@ type StatusResponse struct {
 	ResultsUrl             string        `json:"results_url"`
 }
 
-type ErrorResponse struct {
+type errMsg struct {
+	Error errMsgInner `json:"error"`
+}
+
+type errMsgInner struct {
 	Code    int     `json:"code"`
 	Message string  `json:"message"`
 	Errors  []Error `json:"errors"`
+}
+
+type ErrorResponse struct {
+	Code    int     `json:"-"`
+	Message string  `json:"-"`
+	Errors  []Error `json:"-"`
+}
+
+func (e *ErrorResponse) UnmarshalJSON(raw []byte) error {
+	msg := &errMsg{
+		Error: errMsgInner{},
+	}
+	err := json.Unmarshal(raw, &msg)
+	if err != nil {
+		return err
+	}
+	e.Code = msg.Error.Code
+	e.Message = msg.Error.Message
+	e.Errors = msg.Error.Errors
+	return nil
+}
+
+func (e ErrorResponse) MarshalJSON() ([]byte, error) {
+	return json.Marshal(
+		errMsg{
+			Error: errMsgInner{
+				Message: e.Message,
+				Code:    e.Code,
+				Errors:  e.Errors,
+			},
+		},
+	)
+}
+
+func (e ErrorResponse) Error() string {
+	return fmt.Sprintf("code=%d,message=%s,nested_errors=%d", e.Code, e.Message, len(e.Errors))
 }
 
 type Error struct {
@@ -211,7 +251,9 @@ type Error struct {
 	Message string `json:"message"`
 }
 
-func (e ErrorResponse) Error() string { return e.Message }
+func (e Error) Error() string {
+	return fmt.Sprintf("domain=%s,reason=%s,message=%s", e.Domain, e.Reason, e.Message)
+}
 
 type CallbackRequest struct {
 	ControllerId           string        `json:"controller_id"`

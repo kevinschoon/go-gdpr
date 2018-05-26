@@ -78,7 +78,6 @@ type Server struct {
 }
 
 func (s Server) error(w http.ResponseWriter, err ErrorResponse) {
-	w.Header().Set("Content Type", "application/json")
 	w.Header().Set("Cache Control", "no store")
 	w.WriteHeader(err.Code)
 	json.NewEncoder(w).Encode(err)
@@ -91,9 +90,12 @@ func (s Server) handle(fn Handler) httprouter.Handle {
 		w.Header().Set("X-OpenGDPR-ProcessorDomain", s.processorDomain)
 		err := fn(w, r, p)
 		if err != nil {
-			if e, ok := err.(ErrorResponse); ok {
+			switch e := err.(type) {
+			case ErrorResponse:
 				s.error(w, e)
-			} else {
+			case *ErrorResponse:
+				s.error(w, *e)
+			default:
 				s.error(w, ErrorResponse{Message: err.Error(), Code: 500})
 			}
 		}
