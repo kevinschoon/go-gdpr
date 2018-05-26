@@ -11,7 +11,7 @@
 
 ## Usage
 
-The primary use case for `go-gdpr` is wrapping business logic via the `Processor` interface with the `Server` type. There is an additional `Client` which allows the consumer to access the processor via HTTP. `go-gdpr` may also be useful by providing static typs for OpenGDPR.
+The primary use case for `go-gdpr` is wrapping business logic via the `Processor` interface with the `Server` type. There is an additional `Client` which allows the consumer to access the processor via HTTP calls. The library may also be useful by providing static typing for other server implementations or other various scenarios.
 
 ### Simple Processor Example
 
