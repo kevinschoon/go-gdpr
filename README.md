@@ -1,4 +1,5 @@
 # go-gdpr
+[![CircleCI](https://circleci.com/gh/greencase/go-gdpr/tree/master.svg?style=svg)](https://circleci.com/gh/greencase/go-gdpr/tree/master)
 [![GoDoc](https://godoc.org/github.com/greencase/go-gdpr?status.svg)](https://godoc.org/github.com/greencase/go-gdpr)
 
 `go-gdpr` is an experimental implementation of the [OpenGDPR](https://www.opengdpr.org) specification for use with the EU [GDPR](https://www.eugdpr.org/) regulation. **Disclaimer: Using this library does not imply accordance with GDPR!** This project is intended to be consumed as a library to aid in the processing of HTTP requests based on the OpenGDPR standard.
