@@ -72,6 +72,7 @@ type ServerOptions struct {
 
 // Server provides HTTP access to an underlying Processor.
 type Server struct {
+	handlerFn       func(http.Handler) http.Handler
 	router          *httprouter.Router
 	processorDomain string
 }
