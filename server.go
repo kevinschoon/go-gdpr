@@ -77,6 +77,61 @@ type Server struct {
 	processorDomain string
 }
 
+// opengdpr_requests
+
+func getRequest(opts *ServerOptions) Handler {
+	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
+		resp, err := opts.Processor.Status(p.ByName("id"))
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func postRequest(opts *ServerOptions) Handler {
+	validate := ValidateRequest(opts)
+	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
+		req := &Request{}
+		err := json.NewDecoder(r.Body).Decode(req)
+		if err != nil {
+			return err
+		}
+		if err := validate(req); err != nil {
+			return err
+		}
+		resp, err := opts.Processor.Request(req)
+		if err != nil {
+			return err
+		}
+		w.Header().Add("X-OpenGDPR-Signature", req.Signature())
+		return json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func deleteRequest(opts *ServerOptions) Handler {
+	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
+		resp, err := opts.Processor.Cancel(p.ByName("id"))
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(w).Encode(resp)
+	}
+}
+
+// discovery
+
+func getDiscovery(opts *ServerOptions) Handler {
+	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
+		resp := DiscoveryResponse{
+			ApiVersion:                   ApiVersion,
+			SupportedSubjectRequestTypes: opts.SubjectTypes,
+			SupportedIdentities:          opts.Identities,
+		}
+		return json.NewEncoder(w).Encode(resp)
+	}
+}
+
 func (s Server) error(w http.ResponseWriter, err ErrorResponse) {
 	w.Header().Set("Cache Control", "no store")
 	w.WriteHeader(err.Code)
