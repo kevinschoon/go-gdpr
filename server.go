@@ -105,6 +105,7 @@ func postRequest(opts *ServerOptions) Handler {
 			return err
 		}
 		w.Header().Add("X-OpenGDPR-Signature", req.Signature())
+		w.WriteHeader(201)
 		return json.NewEncoder(w).Encode(resp)
 	}
 }
