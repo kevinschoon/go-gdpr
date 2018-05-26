@@ -127,7 +127,7 @@ func TestServerStatus(t *testing.T) {
 
 func TestServerCancel(t *testing.T) {
 	server, _ := newServer()
-	r := httptest.NewRequest("GET", "/opengdpr_requests/1234", bytes.NewBuffer(mockResponseBody))
+	r := httptest.NewRequest("DELETE", "/opengdpr_requests/1234", bytes.NewBuffer(mockResponseBody))
 	w := httptest.NewRecorder()
 	server.ServeHTTP(w, r)
 	t.Log(w.Body.String())
@@ -136,4 +136,18 @@ func TestServerCancel(t *testing.T) {
 	assert.Equal(t, "application/json", w.Header().Get("Accept"))
 	resp := &CancellationResponse{}
 	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), resp))
+}
+
+func TestServerError(t *testing.T) {
+	server, proc := newServer()
+	proc.err = ErrorResponse{Code: 501, Message: "Oh No!"}
+	r := httptest.NewRequest("GET", "/opengdpr_requests/1234", bytes.NewBuffer(mockResponseBody))
+	w := httptest.NewRecorder()
+	server.ServeHTTP(w, r)
+	t.Log(w.Body.String())
+	assert.Equal(t, 501, w.Code)
+	resp := &ErrorResponse{}
+	assert.NoError(t, json.Unmarshal(w.Body.Bytes(), resp))
+	assert.Equal(t, 501, resp.Code)
+	assert.Equal(t, "Oh No!", resp.Message)
 }
