@@ -86,6 +86,8 @@ func (s Server) error(w http.ResponseWriter, err ErrorResponse) {
 
 func (s Server) handle(fn Handler) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
+		w.Header().Set("Accept", "application/json")
+		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-OpenGDPR-ProcessorDomain", s.processorDomain)
 		err := fn(w, r, p)
 		if err != nil {
