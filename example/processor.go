@@ -52,8 +52,7 @@ func (p *Processor) Cancel(requestId string) (*gdpr.CancellationResponse, error)
 	if err != nil {
 		return nil, err
 	}
-	req.RequestStatus = string(gdpr.STATUS_CANCELLED)
-	err = p.db.Write(*req)
+	err = p.db.SetStatus(req.SubjectRequestId, gdpr.STATUS_CANCELLED)
 	if err != nil {
 		return nil, err
 	}
@@ -70,6 +69,10 @@ func (p *Processor) Process() error {
 	if err != nil {
 		return err
 	}
+	var cbCount int
+	for _, req := range pending {
+		cbCount += len(req.StatusCallbackUrls)
+	}
 	log.Printf("processing %d pending requests\n", len(pending))
 	doneCh := make(chan struct {
 		SubjectRequestId string
@@ -78,23 +81,26 @@ func (p *Processor) Process() error {
 	for _, request := range pending {
 		// TODO: Process Requests Here!
 		go func(request *dbState) {
-			cbReq := &gdpr.CallbackRequest{}
-			err = gdpr.Callback(cbReq, &gdpr.CallbackOptions{
-				MaxAttempts:     3,
-				ProcessorDomain: p.domain,
-				Backoff:         5 * time.Second,
-				Signature:       request.EncodedRequest,
-			})
-			doneCh <- struct {
-				SubjectRequestId string
-				Err              error
-			}{
-				SubjectRequestId: request.SubjectRequestId,
-				Err:              err,
+			for _, cbUrl := range request.StatusCallbackUrls {
+				log.Printf("sending callback: %s", cbUrl)
+				cbReq := &gdpr.CallbackRequest{StatusCallbackUrl: cbUrl}
+				err = gdpr.Callback(cbReq, &gdpr.CallbackOptions{
+					MaxAttempts:     3,
+					ProcessorDomain: p.domain,
+					Backoff:         5 * time.Second,
+					Signature:       request.EncodedRequest,
+				})
+				doneCh <- struct {
+					SubjectRequestId string
+					Err              error
+				}{
+					SubjectRequestId: request.SubjectRequestId,
+					Err:              err,
+				}
 			}
 		}(request)
 	}
-	for i := 0; i < len(pending); i++ {
+	for i := 0; i < cbCount; i++ {
 		msg := <-doneCh
 		if msg.Err != nil {
 			// BUG: The OpenGDPR specification doesn't say what should happen

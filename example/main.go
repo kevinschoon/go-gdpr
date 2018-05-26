@@ -25,7 +25,7 @@ func main() {
 	maybe(err)
 	if *migrate {
 		log.Println("migrating database")
-		maybe(db.Migrate())
+		log.Println(db.Migrate())
 	}
 	proc := &Processor{
 		db: db,

@@ -22,7 +22,8 @@ type dbState struct {
 }
 
 type Database struct {
-	db *sql.DB
+	db   *sql.DB
+	path string
 }
 
 func NewDatabase(path string) (*Database, error) {
@@ -33,7 +34,7 @@ func NewDatabase(path string) (*Database, error) {
 	// Allows concurrent access to SQLite
 	db.SetMaxOpenConns(1)
 	err = db.Ping()
-	return &Database{db: db}, err
+	return &Database{db: db, path: path}, err
 }
 
 func (d *Database) Migrate() error {
@@ -75,8 +76,8 @@ func (d *Database) callbackUrls(tx *sql.Tx, id string) ([]string, error) {
 func (d *Database) Read(id string) (*dbState, error) {
 	row := d.db.QueryRow("SELECT * FROM request WHERE subject_request_id = $1", id)
 	req := &dbState{}
-	err := row.Scan(req.SubjectRequestId, req.RequestStatus, req.EncodedRequest,
-		req.SubmittedTime, req.ReceivedTime, req.ExpectedCompletionTime)
+	err := row.Scan(&req.SubjectRequestId, &req.RequestStatus, &req.EncodedRequest,
+		&req.SubmittedTime, &req.ReceivedTime, &req.ExpectedCompletionTime)
 	return req, err
 }
 
