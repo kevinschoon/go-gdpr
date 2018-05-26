@@ -12,6 +12,5 @@ dep:
 	cd $$GOPATH/src/${BASEPATH} && $@ ensure
 
 test:
-	@go $@ -v .
-	@go $@ -bench .
+	@go $@ -v -bench .
 	@go vet .
