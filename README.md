@@ -11,7 +11,7 @@
 
 ## Usage
 
-The primary use case for `go-gdpr` is wrapping business logic via the `Processor` interface with the `Server` type. There is an additional `Client` which allows the consumer to access the processor via HTTP calls. The library may also be useful by providing static typing for other server implementations or other various scenarios.
+The primary use case for `go-gdpr` is wrapping business logic via the `Processor` interface with the `Server` type. There is an additional `Client` which allows the consumer to access the processor via HTTP calls. This library might also be useful by providing static typing for other server implementations.
 
 ### Simple Processor Example
 
@@ -19,9 +19,10 @@ The primary use case for `go-gdpr` is wrapping business logic via the `Processor
 
     import (
         "fmt"
-        "github.com/greencase/go-gdpr"
         "net/http"
         "os"
+
+        "github.com/greencase/go-gdpr"
     )
 
     type Processor struct{}
@@ -67,7 +68,7 @@ The primary use case for `go-gdpr` is wrapping business logic via the `Processor
 
 ### Stateful Processor Example
 
-The `example` package implements an OpenGDPR processor backed with a SQLite database. It launches a go-gdpr `Server` in a separate Go routine and then polls the database for new requests in the `STATUS_PENDING` state. Note that this technique is not particularly efficient and in a production deployment one would likely prefer a message queue. 
+The `example` package implements an OpenGDPR processor backed with a SQLite database. It launches a `Server` in a separate Go routine and then polls the database for new requests in the `STATUS_PENDING` state. Note that this technique is not particularly efficient and in a production deployment one would likely prefer a message queue. 
 
 #### Installation
 
@@ -85,6 +86,7 @@ Ensure you have [dep](https://github.com/golang/dep) installed.
 Make a new GDPR request to the processor:
 
     # Create an erasure request
+
     curl -X POST -d '{"subject_request_id": "1234", "subject_request_type":"erasure", "subject_identities": [{"identity_type": "email", "identity_format": "raw"}]}' http://localhost:4000/opengdpr_requests
 
     ...
@@ -126,10 +128,12 @@ Make a new GDPR request to the processor:
 Callback requests are also honored:
 
 
-    # In a seperate process pane/process:
+    # In a seperate process process:
+
     nc -l 4001
 
     # Encode a new request:
+
     curl -v -X POST -d '{"subject_request_id": "12345", "subject_request_type":"erasure", "subject_identities": [{"identity_type": "email", "identity_format": "raw"}], "status_callback_urls": ["http://localhost:4001"]}' http://localhost:4000/opengdpr_requests
     
 
@@ -147,10 +151,10 @@ Callback requests are also honored:
 
 ## TODO
 
-    * SSL / Certificate Support
-    * Certificate Verification
-    * Domain/Controller Whitelisting
-
+* SSL / Certificate Support
+* Certificate Verification
+* Domain/Controller Whitelisting
+* ???
 
 ## Contributing
 
