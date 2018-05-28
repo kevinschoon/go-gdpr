@@ -1,7 +1,6 @@
 package gdpr
 
 import (
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -167,12 +166,6 @@ type Request struct {
 func (r Request) Base64() string {
 	raw, _ := json.Marshal(r)
 	return base64.StdEncoding.EncodeToString(raw)
-}
-
-func (r Request) Signature() string {
-	hash := sha256.New()
-	json.NewEncoder(hash).Encode(r)
-	return base64.StdEncoding.EncodeToString(hash.Sum(nil))
 }
 
 type Response struct {

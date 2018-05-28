@@ -32,6 +32,7 @@ func (d defaultCaller) Call(method, url string, body io.Reader) (*http.Response,
 // ClientOptions conifigure a Client.
 type ClientOptions struct {
 	Endpoint string
+	Verifier Verifier
 	Client   *http.Client
 }
 
@@ -40,9 +41,10 @@ type ClientOptions struct {
 type Client struct {
 	endpoint string
 	caller   caller
+	verifier Verifier
 }
 
-func (c *Client) json(resp *http.Response, err error, v interface{}) error {
+func (c *Client) json(resp *http.Response, err error, verify bool, v interface{}) error {
 	if err != nil {
 		return err
 	}
@@ -64,6 +66,12 @@ func (c *Client) json(resp *http.Response, err error, v interface{}) error {
 	if v == nil {
 		return nil
 	}
+	if verify {
+		// verify the remote signature
+		if err := c.verifier.Verify(raw, resp.Header.Get("X-OpenGDPR-Signature")); err != nil {
+			return fmt.Errorf("could not verify remote X-OpenGDPR-Signature")
+		}
+	}
 	return json.Unmarshal(raw, v)
 }
 
@@ -76,28 +84,28 @@ func (c *Client) Request(req *Request) (*Response, error) {
 	}
 	reqResp := &Response{}
 	resp, err := c.caller.Call("POST", c.endpoint+"/opengdpr_requests", buf)
-	return reqResp, c.json(resp, err, reqResp)
+	return reqResp, c.json(resp, err, true, reqResp)
 }
 
 // Status checks the status of an existing GDPR request.
 func (c *Client) Status(id string) (*StatusResponse, error) {
 	statResp := &StatusResponse{}
 	resp, err := c.caller.Call("GET", c.endpoint+"/opengdpr_requests/"+id, nil)
-	return statResp, c.json(resp, err, statResp)
+	return statResp, c.json(resp, err, true, statResp)
 }
 
 // Cancel cancels an existing GDPR request.
 func (c *Client) Cancel(id string) (*CancellationResponse, error) {
 	cancelResp := &CancellationResponse{}
 	resp, err := c.caller.Call("DELETE", c.endpoint+"/opengdpr_requests/"+id, nil)
-	return cancelResp, c.json(resp, err, cancelResp)
+	return cancelResp, c.json(resp, err, true, cancelResp)
 }
 
 // Discovery describes the remote OpenGDPR speciication.
 func (c *Client) Discovery() (*DiscoveryResponse, error) {
 	discResp := &DiscoveryResponse{}
 	resp, err := c.caller.Call("GET", c.endpoint+"/discovery", nil)
-	return discResp, c.json(resp, err, discResp)
+	return discResp, c.json(resp, err, false, discResp)
 }
 
 // NewClient returns a new OpenGDPR client.
@@ -115,6 +123,7 @@ func NewClient(opts *ClientOptions) *Client {
 			},
 		},
 		endpoint: opts.Endpoint,
+		verifier: opts.Verifier,
 	}
 	return client
 }

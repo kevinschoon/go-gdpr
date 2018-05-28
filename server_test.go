@@ -84,6 +84,7 @@ func newServer() (*Server, *mockProcessor) {
 		},
 	}
 	return NewServer(&ServerOptions{
+		Signer:    NoopSigner{},
 		Processor: proc,
 		SubjectTypes: []SubjectType{
 			SUBJECT_ERASURE,

@@ -1,6 +1,7 @@
 package gdpr
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 
@@ -57,17 +58,28 @@ func defaultHandlerMap() HandlerMap {
 		"/discovery": map[string]Builder{
 			"GET": getDiscovery,
 		},
+		// TODO: This is an optional endpoint that
+		// can serve the public processor certificate.
+		// It's not mentioned in the OpenGDPR spec but
+		// is convenient since you don't need to setup
+		// a separate file server, etc.
+		"/cert.pem": map[string]Builder{
+			"GET": getCert,
+		},
 	}
 }
 
 // ServerOptions contains configuration options that
 // effect the operation of the HTTP server.
 type ServerOptions struct {
-	Identities      []Identity
-	SubjectTypes    []SubjectType
-	Processor       Processor
-	HandlerMap      HandlerMap
-	ProcessorDomain string
+	Signer                    Signer
+	Identities                []Identity
+	SubjectTypes              []SubjectType
+	Processor                 Processor
+	HandlerMap                HandlerMap
+	ProcessorDomain           string
+	ProcessorCertificate      string
+	ProcessorCertificateBytes []byte
 }
 
 // Server provides HTTP access to an underlying Processor.
@@ -85,7 +97,14 @@ func getRequest(opts *ServerOptions) Handler {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(w).Encode(resp)
+		buf := bytes.NewBuffer(nil)
+		sig, err := encodeAndSign(buf, opts.Signer, resp)
+		if err != nil {
+			return err
+		}
+		w.Header().Set("X-OpenGDPR-Signature", sig)
+		_, err = buf.WriteTo(w)
+		return err
 	}
 }
 
@@ -100,13 +119,19 @@ func postRequest(opts *ServerOptions) Handler {
 		if err := validate(req); err != nil {
 			return err
 		}
+		buf := bytes.NewBuffer(nil)
 		resp, err := opts.Processor.Request(req)
 		if err != nil {
 			return err
 		}
-		w.Header().Add("X-OpenGDPR-Signature", req.Signature())
+		sig, err := encodeAndSign(buf, opts.Signer, resp)
+		if err != nil {
+			return err
+		}
+		w.Header().Set("X-OpenGDPR-Signature", sig)
 		w.WriteHeader(201)
-		return json.NewEncoder(w).Encode(resp)
+		_, err = buf.WriteTo(w)
+		return err
 	}
 }
 
@@ -116,7 +141,14 @@ func deleteRequest(opts *ServerOptions) Handler {
 		if err != nil {
 			return err
 		}
-		return json.NewEncoder(w).Encode(resp)
+		buf := bytes.NewBuffer(nil)
+		sig, err := encodeAndSign(buf, opts.Signer, resp)
+		if err != nil {
+			return err
+		}
+		w.Header().Set("X-OpenGDPR-Signature", sig)
+		_, err = buf.WriteTo(w)
+		return err
 	}
 }
 
@@ -128,8 +160,20 @@ func getDiscovery(opts *ServerOptions) Handler {
 			ApiVersion:                   ApiVersion,
 			SupportedSubjectRequestTypes: opts.SubjectTypes,
 			SupportedIdentities:          opts.Identities,
+			ProcessorCertificate:         opts.ProcessorCertificate,
 		}
 		return json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func getCert(opts *ServerOptions) Handler {
+	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) error {
+		if opts.ProcessorCertificateBytes == nil {
+			w.WriteHeader(404)
+			return nil
+		}
+		_, err := w.Write(opts.ProcessorCertificateBytes)
+		return err
 	}
 }
 

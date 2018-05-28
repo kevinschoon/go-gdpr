@@ -90,7 +90,7 @@ func newMockCaller(resp *http.Response, err error) *mockCaller {
 }
 
 func TestClientRequest(t *testing.T) {
-	c := NewClient(&ClientOptions{})
+	c := NewClient(&ClientOptions{Verifier: NoopVerifier{}})
 	c.caller = newMockCaller(&http.Response{
 		StatusCode: 200,
 		Body:       ioutil.NopCloser(bytes.NewBuffer(mockResp)),
@@ -102,7 +102,7 @@ func TestClientRequest(t *testing.T) {
 }
 
 func TestClientStatus(t *testing.T) {
-	c := NewClient(&ClientOptions{})
+	c := NewClient(&ClientOptions{Verifier: NoopVerifier{}})
 	c.caller = newMockCaller(&http.Response{
 		StatusCode: 200,
 		Body:       ioutil.NopCloser(bytes.NewBuffer(mockStatusResp)),
@@ -116,7 +116,7 @@ func TestClientStatus(t *testing.T) {
 }
 
 func TestClientCancel(t *testing.T) {
-	c := NewClient(&ClientOptions{})
+	c := NewClient(&ClientOptions{Verifier: NoopVerifier{}})
 	c.caller = newMockCaller(&http.Response{
 		StatusCode: 200,
 		Body:       ioutil.NopCloser(bytes.NewBuffer(mockCancellationResp)),
@@ -129,7 +129,7 @@ func TestClientCancel(t *testing.T) {
 }
 
 func TestClientDiscover(t *testing.T) {
-	c := NewClient(&ClientOptions{})
+	c := NewClient(&ClientOptions{Verifier: NoopVerifier{}})
 	c.caller = newMockCaller(&http.Response{
 		StatusCode: 200,
 		Body:       ioutil.NopCloser(bytes.NewBuffer(mockDiscoveryResp)),
@@ -144,7 +144,7 @@ func TestClientDiscover(t *testing.T) {
 }
 
 func TestClientError(t *testing.T) {
-	c := NewClient(&ClientOptions{})
+	c := NewClient(&ClientOptions{Verifier: NoopVerifier{}})
 	c.caller = newMockCaller(&http.Response{
 		StatusCode: 500,
 		Body:       ioutil.NopCloser(bytes.NewBuffer(mockErrorResp)),

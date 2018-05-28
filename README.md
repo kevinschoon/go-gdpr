@@ -44,6 +44,7 @@ The primary use case for `go-gdpr` is wrapping business logic via the `Processor
 
     func main() {
         server := gdpr.NewServer(&gdpr.ServerOptions{
+            Signer: gdpr.NoopSigner{},
             ProcessorDomain: "my-processor-domain.com",
             Processor:       &Processor{},
             Identities: []gdpr.Identity{
