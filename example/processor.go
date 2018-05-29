@@ -7,10 +7,11 @@ import (
 	"github.com/greencase/go-gdpr"
 )
 
-// SQLite backed OpenGDPR server implementation
+// SQLite backed OpenGDPR processor implementation
 type Processor struct {
 	db     *Database
 	domain string
+	signer gdpr.Signer
 }
 
 func (p *Processor) Request(req *gdpr.Request) (*gdpr.Response, error) {
@@ -73,6 +74,9 @@ func (p *Processor) Process() error {
 	for _, req := range pending {
 		cbCount += len(req.StatusCallbackUrls)
 	}
+	if cbCount == 0 {
+		return nil
+	}
 	log.Printf("processing %d pending requests\n", len(pending))
 	doneCh := make(chan struct {
 		SubjectRequestId string
@@ -83,12 +87,16 @@ func (p *Processor) Process() error {
 		go func(request *dbState) {
 			for _, cbUrl := range request.StatusCallbackUrls {
 				log.Printf("sending callback: %s", cbUrl)
-				cbReq := &gdpr.CallbackRequest{StatusCallbackUrl: cbUrl}
+				cbReq := &gdpr.CallbackRequest{
+					SubjectRequestId:  request.SubjectRequestId,
+					RequestStatus:     gdpr.STATUS_COMPLETED,
+					StatusCallbackUrl: cbUrl,
+				}
 				err = gdpr.Callback(cbReq, &gdpr.CallbackOptions{
 					MaxAttempts:     3,
 					ProcessorDomain: p.domain,
 					Backoff:         5 * time.Second,
-					Signature:       request.EncodedRequest,
+					Signer:          p.signer,
 				})
 				doneCh <- struct {
 					SubjectRequestId string
