@@ -138,7 +138,11 @@ func (v *rsaVerifier) Verify(body []byte, signature string) error {
 		return err
 	}
 	hashed := sha256.Sum256(body)
-	return rsa.VerifyPKCS1v15(v.publicKey, crypto.SHA256, hashed[:], decoded)
+	err = rsa.VerifyPKCS1v15(v.publicKey, crypto.SHA256, hashed[:], decoded)
+	if err != nil {
+		return ErrInvalidRequestSignature(signature, err)
+	}
+	return nil
 }
 
 func (v *rsaVerifier) Key() []byte {
