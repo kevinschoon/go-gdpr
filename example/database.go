@@ -109,7 +109,7 @@ func (d *Database) Pending() ([]*dbState, error) {
 	return requests, tx.Commit()
 }
 
-func (d *Database) Write(req dbState) error {
+func (d *Database) Write(req *dbState) error {
 	tx, err := d.db.Begin()
 	if err != nil {
 		return err

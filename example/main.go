@@ -17,6 +17,7 @@ func maybe(err error) {
 
 func main() {
 	var (
+		interval       = flag.String("interval", "1s", "interval to generate new requests at")
 		processor      = flag.Bool("processor", false, "run as a processor")
 		controller     = flag.Bool("controller", false, "run as a controller")
 		migrate        = flag.Bool("migrate", false, "migrate the database")
@@ -37,10 +38,14 @@ func main() {
 		PublicKeyPath: *publicKeyPath,
 	})
 	maybe(err)
+	// Run a Processor
 	if *processor {
-		proc := &Processor{db: db, signer: signer}
+		proc := &Processor{
+			queue:  make(chan *dbState),
+			db:     db,
+			signer: signer,
+		}
 		svr := gdpr.NewServer(&gdpr.ServerOptions{
-			ProcessorCertificateBytes: verifier.Key(),
 			Signer:    signer,
 			Processor: proc,
 			Identities: []gdpr.Identity{
@@ -60,13 +65,13 @@ func main() {
 			log.Println("server listening @ :4000")
 			maybe(http.ListenAndServe(":4000", svr))
 		}()
-		for {
-			maybe(proc.Process())
-			time.Sleep(5 * time.Second)
-		}
+		maybe(proc.Process())
 		return
 	}
+	// Run a Controller
 	if *controller {
+		sleepInterval, err := time.ParseDuration(*interval)
+		maybe(err)
 		contr := &Controller{
 			client: gdpr.NewClient(&gdpr.ClientOptions{
 				Endpoint: "http://localhost:4000",
@@ -85,7 +90,7 @@ func main() {
 		}()
 		for {
 			maybe(contr.Request())
-			time.Sleep(2 * time.Second)
+			time.Sleep(sleepInterval)
 		}
 	}
 }
