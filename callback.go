@@ -13,8 +13,8 @@ type CallbackOptions struct {
 	MaxAttempts     int
 	Backoff         time.Duration
 	ProcessorDomain string
-	Signature       string
 	Client          *http.Client
+	Signer          Signer
 }
 
 // Callback sends the CallbackRequest type to the configured
@@ -30,12 +30,16 @@ func Callback(cbReq *CallbackRequest, opts *CallbackOptions) error {
 	if err != nil {
 		return err
 	}
+	signature, err := opts.Signer.Sign(buf.Bytes())
+	if err != nil {
+		return err
+	}
 	req, err := http.NewRequest("POST", cbReq.StatusCallbackUrl, buf)
 	if err != nil {
 		return err
 	}
 	req.Header.Set("X-OpenGDPR-Processor-Domain", opts.ProcessorDomain)
-	req.Header.Set("X-OpenGDPR-Signature", opts.Signature)
+	req.Header.Set("X-OpenGDPR-Signature", signature)
 	// Attempt to make callback
 	for i := 0; i < opts.MaxAttempts; i++ {
 		resp, err := client.Do(req)

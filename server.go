@@ -8,6 +8,14 @@ import (
 	"github.com/julienschmidt/httprouter"
 )
 
+// Controller makes new requests to a Processor
+// and processes Callback requests.
+type Controller interface {
+	// Process a callback from a remote
+	// processor.
+	Callback(req *CallbackRequest) error
+}
+
 // Processor implements the business logic for processing GDPR requests.
 // The Processor interface is intended to be wrapped by the Server type
 // and provide an HTTP REST server. Any method may return an ErrorResponse
@@ -46,33 +54,46 @@ func (hm HandlerMap) Merge(other HandlerMap) {
 	}
 }
 
-func defaultHandlerMap() HandlerMap {
-	return HandlerMap{
-		"/opengdpr_requests/:id": map[string]Builder{
+func buildHandlerMap(opts *ServerOptions) HandlerMap {
+	hm := HandlerMap{}
+	// controller map
+	if opts.Controller != nil {
+		hm["/opengdpr_callbacks"] = map[string]Builder{
+			"POST": postCallback,
+		}
+	}
+	if opts.Processor != nil {
+		hm["/opengdpr_requests/:id"] = map[string]Builder{
 			"GET":    getRequest,
 			"DELETE": deleteRequest,
-		},
-		"/opengdpr_requests": map[string]Builder{
+		}
+		hm["/opengdpr_requests"] = map[string]Builder{
 			"POST": postRequest,
-		},
-		"/discovery": map[string]Builder{
+		}
+		hm["/discovery"] = map[string]Builder{
 			"GET": getDiscovery,
-		},
+		}
 		// TODO: This is an optional endpoint that
 		// can serve the public processor certificate.
 		// It's not mentioned in the OpenGDPR spec but
 		// is convenient since you don't need to setup
 		// a separate file server, etc.
-		"/cert.pem": map[string]Builder{
+		hm["/cert.pem"] = map[string]Builder{
 			"GET": getCert,
-		},
+		}
 	}
+	if opts.HandlerMap != nil {
+		hm.Merge(opts.HandlerMap)
+	}
+	return hm
 }
 
 // ServerOptions contains configuration options that
 // effect the operation of the HTTP server.
 type ServerOptions struct {
+	Controller                Controller
 	Signer                    Signer
+	Verifier                  Verifier
 	Identities                []Identity
 	SubjectTypes              []SubjectType
 	Processor                 Processor
@@ -110,7 +131,7 @@ func getRequest(opts *ServerOptions) Handler {
 
 func postRequest(opts *ServerOptions) Handler {
 	validate := ValidateRequest(opts)
-	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
+	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) error {
 		req := &Request{}
 		err := json.NewDecoder(r.Body).Decode(req)
 		if err != nil {
@@ -155,7 +176,7 @@ func deleteRequest(opts *ServerOptions) Handler {
 // discovery
 
 func getDiscovery(opts *ServerOptions) Handler {
-	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) error {
+	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) error {
 		resp := DiscoveryResponse{
 			ApiVersion:                   ApiVersion,
 			SupportedSubjectRequestTypes: opts.SubjectTypes,
@@ -174,6 +195,19 @@ func getCert(opts *ServerOptions) Handler {
 		}
 		_, err := w.Write(opts.ProcessorCertificateBytes)
 		return err
+	}
+}
+
+// callbacks
+
+func postCallback(opts *ServerOptions) Handler {
+	return func(w http.ResponseWriter, r *http.Request, _ httprouter.Params) error {
+		req := &CallbackRequest{}
+		err := json.NewDecoder(r.Body).Decode(req)
+		if err != nil {
+			return err
+		}
+		return opts.Controller.Callback(req)
 	}
 }
 
@@ -211,10 +245,7 @@ func NewServer(opts *ServerOptions) *Server {
 		router:          httprouter.New(),
 		processorDomain: opts.ProcessorDomain,
 	}
-	hm := defaultHandlerMap()
-	if opts.HandlerMap != nil {
-		hm.Merge(opts.HandlerMap)
-	}
+	hm := buildHandlerMap(opts)
 	for path, methods := range hm {
 		for method, builder := range methods {
 			server.router.Handle(method, path, server.handle(builder(opts)))

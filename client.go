@@ -118,7 +118,7 @@ func NewClient(opts *ClientOptions) *Client {
 		caller: &defaultCaller{
 			client: cli,
 			headers: map[string]string{
-				"GDPR Version": ApiVersion,
+				"GDPR-Version": ApiVersion,
 				"Content-Type": "Application/JSON",
 			},
 		},
