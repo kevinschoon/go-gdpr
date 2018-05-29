@@ -1,10 +1,5 @@
 package gdpr
 
-import (
-	"bytes"
-	"encoding/json"
-)
-
 // SupportedFunc returns a function that checks if the server can
 // support a specific request.
 func SupportedFunc(opts *ServerOptions) func(*Request) error {
@@ -40,17 +35,4 @@ func ValidateRequest(opts *ServerOptions) func(*Request) error {
 		}
 		return fn(req)
 	}
-}
-
-// encodeAndSign encodes some value and generates a signature
-func encodeAndSign(buf *bytes.Buffer, s Signer, v interface{}) (string, error) {
-	err := json.NewEncoder(buf).Encode(v)
-	if err != nil {
-		return "", err
-	}
-	sig, err := s.Sign(buf.Bytes())
-	if err != nil {
-		return "", err
-	}
-	return sig, nil
 }

@@ -150,7 +150,7 @@ func TestServerDiscovery(t *testing.T) {
 
 func TestServerError(t *testing.T) {
 	server, proc := newServer()
-	proc.err = &ErrorResponse{Code: 501, Message: "Oh No!"}
+	proc.err = ErrorResponse{Code: 501, Message: "Oh No!"}
 	r := httptest.NewRequest("GET", "/opengdpr_requests/1234", nil)
 	w := httptest.NewRecorder()
 	server.ServeHTTP(w, r)

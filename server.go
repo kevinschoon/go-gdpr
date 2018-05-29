@@ -1,7 +1,11 @@
 package gdpr
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
+	"io/ioutil"
 	"net/http"
 
 	"github.com/julienschmidt/httprouter"
@@ -32,8 +36,9 @@ type Processor interface {
 	Cancel(id string) (*CancellationResponse, error)
 }
 
-// Handler satisfies an incoming HTTP request.
-type Handler func(http.ResponseWriter, *http.Request, httprouter.Params) error
+// Handler reads the incoming request body and encodes a
+// json payload to resp.
+type Handler func(resp io.Writer, req io.Reader, p httprouter.Params) error
 
 // Builder is a functional option to construct a Handler.
 type Builder func(opts *ServerOptions) Handler
@@ -75,9 +80,6 @@ type ServerOptions struct {
 	HandlerMap HandlerMap
 	// Processor domain of this server.
 	ProcessorDomain string
-	// Optional public certificate to serve to
-	// any clients for response verification.
-	ProcessorCertificateBytes []byte
 	// Remote URL where the public certificate
 	// of this server can be downloaded and used
 	// to verify subsequent response payload
@@ -89,8 +91,11 @@ type ServerOptions struct {
 // for route matching, in the future we might expand
 // this to support other mux and frameworks.
 type Server struct {
+	signer          Signer
+	verifier        Verifier
+	isProcessor     bool
+	isController    bool
 	headers         http.Header
-	handlerFn       func(http.Handler) http.Handler
 	router          *httprouter.Router
 	processorDomain string
 }
@@ -103,26 +108,76 @@ func (s *Server) setHeaders(w http.ResponseWriter) {
 	}
 }
 
-func (s *Server) error(w http.ResponseWriter, err ErrorResponse) {
-	w.Header().Set("Cache Control", "no-store")
-	w.WriteHeader(err.Code)
-	json.NewEncoder(w).Encode(err)
+// respCode maps any successful request with a
+// specific status code or returns 200.
+func (s *Server) respCode(r *http.Request) int {
+	if r.URL.Path == "/opengdpr_requests" && r.Method == "POST" {
+		return http.StatusCreated
+	}
+	return http.StatusOK
+}
+
+func (s *Server) error(w http.ResponseWriter, err error) bool {
+	if err != nil {
+		w.Header().Set("Cache Control", "no-store")
+		switch e := err.(type) {
+		case ErrorResponse:
+			w.WriteHeader(e.Code)
+			json.NewEncoder(w).Encode(e)
+			return true
+		default:
+			w.WriteHeader(http.StatusInternalServerError)
+			resp := ErrorResponse{Message: e.Error(), Code: 500}
+			json.NewEncoder(w).Encode(resp)
+			return true
+		}
+	}
+	return false
 }
 
 func (s *Server) handle(fn Handler) httprouter.Handle {
 	return func(w http.ResponseWriter, r *http.Request, p httprouter.Params) {
 		s.setHeaders(w)
-		err := fn(w, r, p)
-		if err != nil {
-			switch e := err.(type) {
-			case ErrorResponse:
-				s.error(w, e)
-			case *ErrorResponse:
-				s.error(w, *e)
-			default:
-				s.error(w, ErrorResponse{Message: err.Error(), Code: 500})
+		body := r.Body
+		// allocate a new buffer for the response body
+		buf := bytes.NewBuffer(nil)
+		// If we are serving a controller validate
+		// the request before processing and further
+		if s.isController {
+			// Allocate a new buffer to copy the
+			// payload into after verification
+			reqBody := bytes.NewBuffer(nil)
+			raw, err := ioutil.ReadAll(io.TeeReader(r.Body, reqBody))
+			if s.error(w, err) {
+				// Failed to decode request body
+				return
 			}
+			if s.error(w, s.verifier.Verify(raw, r.Header.Get("X-OpenGDPR-Signature"))) {
+				// Signature verification failed
+				return
+			}
+			// Set the body to the copied original payload
+			body = ioutil.NopCloser(reqBody)
 		}
+		// satisfy the request and process any error
+		if s.error(w, fn(buf, body, p)) {
+			return
+		}
+		// If we are serving a processor add a
+		// signature of the response payload
+		// in our headers.
+		if s.isProcessor {
+			signature, err := s.signer.Sign(buf.Bytes())
+			if err != nil {
+				// fatal since we can't sign our own response
+				panic(fmt.Sprintf("cannot sign response: %s", err.Error()))
+			}
+			// Set the response signature
+			w.Header().Set("X-OpenGDPR-Signature", signature)
+		}
+		w.WriteHeader(s.respCode(r))
+		// write the response
+		w.Write(buf.Bytes())
 	}
 }
 
@@ -132,6 +187,10 @@ func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.router.Ser
 // http.Handler interface.
 func NewServer(opts *ServerOptions) *Server {
 	server := &Server{
+		signer:          opts.Signer,
+		verifier:        opts.Verifier,
+		isProcessor:     hasProcessor(opts),
+		isController:    hasController(opts),
 		headers:         http.Header{},
 		processorDomain: opts.ProcessorDomain,
 	}
