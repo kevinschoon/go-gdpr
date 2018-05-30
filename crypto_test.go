@@ -1,6 +1,7 @@
 package gdpr
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 
@@ -84,57 +85,35 @@ vDiZORDvtNXvX6YoawjXH2NiDY1/STvw82w4h7etqw==
 -----END CERTIFICATE-----
 `)}
 
-func TestRsaSigner(t *testing.T) {
-	expectedSig := "Zcfr4BKJKKsDN/l8rTl44p4R3Mx9hXV5atssYGwU44naAgnP55B2miwPLyRDErWsrxs84wdsl6Uu00xBh1pfGiqjb9EfGBLdj9I1Pm2HC/r9L4pzx/wZWiqNTRQ0Dg+WJ2H4cEIP9f8+kdMa6Jek7+ks8hc1CwZhuzxBWkl4E2E="
-	resp := &Response{
-		ControllerId:     "controller-1234",
-		SubjectRequestId: "request-1234",
-	}
-	respRaw, _ := json.Marshal(resp)
-	signer, err := NewSigner(&KeyOptions{KeyBytes: keyPairOne[0]})
-	assert.NoError(t, err)
-	sig, err := signer.Sign(respRaw)
-	assert.NoError(t, err)
-	assert.Equal(t, expectedSig, sig)
-	// Change the underlying key
-	signer, err = NewSigner(&KeyOptions{KeyBytes: keyPairTwo[0]})
-	assert.NoError(t, err)
-	sig, err = signer.Sign(respRaw)
-	assert.NoError(t, err)
-	assert.NotEqual(t, sig, expectedSig)
-}
-
-func TestRsaVerifier(t *testing.T) {
-	expectedSig := "Zcfr4BKJKKsDN/l8rTl44p4R3Mx9hXV5atssYGwU44naAgnP55B2miwPLyRDErWsrxs84wdsl6Uu00xBh1pfGiqjb9EfGBLdj9I1Pm2HC/r9L4pzx/wZWiqNTRQ0Dg+WJ2H4cEIP9f8+kdMa6Jek7+ks8hc1CwZhuzxBWkl4E2E="
-	resp := &Response{
-		ControllerId:     "controller-1234",
-		SubjectRequestId: "request-1234",
-	}
-	respRaw, _ := json.Marshal(resp)
-	verifier, err := NewVerifier(&KeyOptions{KeyBytes: keyPairOne[1]})
-	assert.NoError(t, err)
-	err = verifier.Verify(respRaw, expectedSig)
-	assert.NoError(t, err)
-	verifier, err = NewVerifier(&KeyOptions{KeyBytes: keyPairTwo[1]})
-	assert.NoError(t, err)
-	err = verifier.Verify(respRaw, expectedSig)
-	assert.Error(t, err)
-}
-
 func TestSignerVerifier(t *testing.T) {
-	signer, err := NewSigner(&KeyOptions{KeyBytes: keyPairOne[0]})
-	assert.NoError(t, err)
+	buf := bytes.NewBuffer(nil)
 	resp := &Response{
 		ControllerId:     "controller-1234",
 		SubjectRequestId: "request-1234",
 	}
-	respRaw, _ := json.Marshal(resp)
-	sig, err := signer.Sign(respRaw)
+	json.NewEncoder(buf).Encode(resp)
+	signer := MustNewSigner(&KeyOptions{KeyBytes: keyPairOne[0]})
+	verifier := MustNewVerifier(&KeyOptions{KeyBytes: keyPairOne[1]})
+	// Generate a signature from the response
+	sig, err := signer.Sign(buf.Bytes())
 	assert.NoError(t, err)
-	verifier, err := NewVerifier(&KeyOptions{KeyBytes: keyPairOne[1]})
+	// Verify the signature
+	assert.NoError(t, verifier.Verify(buf.Bytes(), sig))
+	// Modify the response
+	buf.WriteString("XXXXXXXX")
+	assert.Error(t, verifier.Verify(buf.Bytes(), sig))
+	// Reset the buffer
+	buf.Reset()
+	json.NewEncoder(buf).Encode(resp)
+	assert.NoError(t, verifier.Verify(buf.Bytes(), sig))
+	// Change the keypair
+	verifier = MustNewVerifier(&KeyOptions{KeyBytes: keyPairTwo[1]})
+	assert.Error(t, verifier.Verify(buf.Bytes(), sig))
+	// Create new signature based on second keypair
+	signer = MustNewSigner(&KeyOptions{KeyBytes: keyPairTwo[0]})
+	sig, err = signer.Sign(buf.Bytes())
 	assert.NoError(t, err)
-	err = verifier.Verify(respRaw, sig)
-	assert.NoError(t, err)
+	assert.NoError(t, verifier.Verify(buf.Bytes(), sig))
 }
 
 func BenchmarkSignVerify(b *testing.B) {
@@ -142,11 +121,12 @@ func BenchmarkSignVerify(b *testing.B) {
 		ControllerId:     "controller-1234",
 		SubjectRequestId: "request-1234",
 	}
-	respRaw, _ := json.Marshal(resp)
-	signer, _ := NewSigner(&KeyOptions{KeyBytes: keyPairOne[0]})
-	verifier, _ := NewVerifier(&KeyOptions{KeyBytes: keyPairOne[1]})
+	buf := bytes.NewBuffer(nil)
+	json.NewEncoder(buf).Encode(resp)
+	signer := MustNewSigner(&KeyOptions{KeyBytes: keyPairOne[0]})
+	verifier := MustNewVerifier(&KeyOptions{KeyBytes: keyPairOne[1]})
 	for n := 0; n < b.N; n++ {
-		sig, _ := signer.Sign(respRaw)
-		verifier.Verify(respRaw, sig)
+		sig, _ := signer.Sign(buf.Bytes())
+		verifier.Verify(buf.Bytes(), sig)
 	}
 }

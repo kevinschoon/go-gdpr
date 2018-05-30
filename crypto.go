@@ -13,18 +13,22 @@ import (
 	"io/ioutil"
 )
 
-// Signer generates a cryptographic signature
-// of a digest of bytes.
+// Signer accepts a byte array which it
+// creates a hash from and generates a
+// signature which it base64 encodes as
+// a string.
 type Signer interface {
 	// Generate a signature for the digest
 	Sign(body []byte) (string, error)
 }
 
-// Verifier verifies the signature of a digest
-// of bytes.
+// Verifier accepts a byte array and
+// base64 encoded signature. It hashes
+// the byte array and compares it's
+// decoded value.
 type Verifier interface {
-	// return the underlying public key
-	Key() []byte
+	// return the underlying cerificate
+	Cert() *x509.Certificate
 	// verify the digest of the signature
 	Verify(body []byte, signature string) error
 }
@@ -39,6 +43,15 @@ type KeyOptions struct {
 	Password []byte
 }
 
+func MustNewSigner(opts *KeyOptions) Signer {
+	signer, err := NewSigner(opts)
+	if err != nil {
+		panic(err)
+	}
+	return signer
+}
+
+// NewSigner creates a new RSA backed Signer
 func NewSigner(opts *KeyOptions) (Signer, error) {
 	privateKey := opts.KeyBytes
 	if opts.KeyPath != "" {
@@ -69,6 +82,15 @@ func NewSigner(opts *KeyOptions) (Signer, error) {
 	return &rsaSigner{privKey: privKey}, nil
 }
 
+func MustNewVerifier(opts *KeyOptions) Verifier {
+	verifier, err := NewVerifier(opts)
+	if err != nil {
+		panic(err)
+	}
+	return verifier
+}
+
+// NewVerifier creates a new RSA backed Verifier
 func NewVerifier(opts *KeyOptions) (Verifier, error) {
 	publicKey := opts.KeyBytes
 	if opts.KeyPath != "" {
@@ -84,10 +106,12 @@ func NewVerifier(opts *KeyOptions) (Verifier, error) {
 		return nil, err
 	}
 	// TODO
+	// Currently only support RSA keys
+	// Need to consider DSA/ECDSA
 	if cert.PublicKeyAlgorithm != x509.RSA {
 		return nil, fmt.Errorf("unsupported public key type")
 	}
-	return &rsaVerifier{publicKey: cert.PublicKey.(*rsa.PublicKey), pemBlock: block}, nil
+	return &rsaVerifier{publicKey: cert.PublicKey.(*rsa.PublicKey), cert: cert}, nil
 }
 
 type rsaSigner struct {
@@ -95,13 +119,11 @@ type rsaSigner struct {
 }
 
 func (s *rsaSigner) Sign(body []byte) (string, error) {
-	// Create a hash of the base64
-	// encoded JSON request body
+	// hash the digest body
 	hashed := sha256.Sum256(body)
-	signature, err := rsa.SignPKCS1v15(rand.Reader, s.privKey, crypto.SHA256, hashed[:])
-	if err != nil {
-		return "", err
-	}
+	// Create a new PSS signature
+	signature, err := rsa.SignPSS(rand.Reader, s.privKey, crypto.SHA256,
+		hashed[:], &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthAuto})
 	buf := bytes.NewBuffer(nil)
 	encoder := base64.NewEncoder(base64.StdEncoding, buf)
 	_, err = encoder.Write(signature)
@@ -118,7 +140,7 @@ func (s *rsaSigner) Sign(body []byte) (string, error) {
 
 type rsaVerifier struct {
 	publicKey *rsa.PublicKey
-	pemBlock  *pem.Block
+	cert      *x509.Certificate
 }
 
 func (v *rsaVerifier) Verify(body []byte, signature string) error {
@@ -127,18 +149,20 @@ func (v *rsaVerifier) Verify(body []byte, signature string) error {
 	if err != nil {
 		return err
 	}
+	// Hash the body digest
 	hashed := sha256.Sum256(body)
-	err = rsa.VerifyPKCS1v15(v.publicKey, crypto.SHA256, hashed[:], decoded)
+	err = rsa.VerifyPSS(v.publicKey, crypto.SHA256, hashed[:],
+		decoded, &rsa.PSSOptions{SaltLength: rsa.PSSSaltLengthAuto})
 	if err != nil {
+		// Verification failed
 		return ErrInvalidRequestSignature(signature, err)
 	}
+	// Signature is valid
 	return nil
 }
 
-func (v *rsaVerifier) Key() []byte {
-	buf := bytes.NewBuffer(nil)
-	pem.Encode(buf, v.pemBlock)
-	return buf.Bytes()
+func (v *rsaVerifier) Cert() *x509.Certificate {
+	return v.cert
 }
 
 // NoopVerifier is useful to forgo
@@ -147,7 +171,7 @@ type NoopVerifier struct{}
 
 func (v NoopVerifier) Verify([]byte, string) error { return nil }
 
-func (v NoopVerifier) Key() []byte { return []byte{} }
+func (v NoopVerifier) Cert() *x509.Certificate { return &x509.Certificate{} }
 
 // NoopSigner is useful to forgo all
 // signature generation.
