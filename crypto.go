@@ -29,22 +29,20 @@ type Verifier interface {
 	Verify(body []byte, signature string) error
 }
 
-type SignerOptions struct {
-	PrivateKeyPath string
-	PrivateKey     []byte
-	Password       []byte
+// KeyOptions specify the path or bytes
+// of a public or private key.
+type KeyOptions struct {
+	KeyPath  string
+	KeyBytes []byte
+	// Optional byte string to decrypt
+	// a private key file.
+	Password []byte
 }
 
-type VerifierOptions struct {
-	PublicKeyPath string
-	PublicKey     []byte
-	Password      []byte
-}
-
-func NewSigner(opts *SignerOptions) (Signer, error) {
-	privateKey := opts.PrivateKey
-	if opts.PrivateKeyPath != "" {
-		raw, err := ioutil.ReadFile(opts.PrivateKeyPath)
+func NewSigner(opts *KeyOptions) (Signer, error) {
+	privateKey := opts.KeyBytes
+	if opts.KeyPath != "" {
+		raw, err := ioutil.ReadFile(opts.KeyPath)
 		if err != nil {
 			return nil, err
 		}
@@ -71,33 +69,25 @@ func NewSigner(opts *SignerOptions) (Signer, error) {
 	return &rsaSigner{privKey: privKey}, nil
 }
 
-func NewVerifier(opts *VerifierOptions) (Verifier, error) {
-	if opts.PublicKeyPath != "" {
-		raw, err := ioutil.ReadFile(opts.PublicKeyPath)
+func NewVerifier(opts *KeyOptions) (Verifier, error) {
+	publicKey := opts.KeyBytes
+	if opts.KeyPath != "" {
+		raw, err := ioutil.ReadFile(opts.KeyPath)
 		if err != nil {
 			return nil, err
 		}
-		opts.PublicKey = raw
+		publicKey = raw
 	}
-	block, _ := pem.Decode(opts.PublicKey)
-	blockBytes := block.Bytes
-	// Decode the PEM key if a password is set
-	if x509.IsEncryptedPEMBlock(block) {
-		b, err := x509.DecryptPEMBlock(block, opts.Password)
-		if err != nil {
-			return nil, err
-		}
-		blockBytes = b
-	}
-	cert, err := x509.ParseCertificate(blockBytes)
+	block, _ := pem.Decode(publicKey)
+	cert, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
 		return nil, err
 	}
-	pubKey, ok := cert.PublicKey.(*rsa.PublicKey)
-	if !ok {
-		return nil, fmt.Errorf("unsupported public key")
+	// TODO
+	if cert.PublicKeyAlgorithm != x509.RSA {
+		return nil, fmt.Errorf("unsupported public key type")
 	}
-	return &rsaVerifier{publicKey: pubKey, pemBlock: block}, nil
+	return &rsaVerifier{publicKey: cert.PublicKey.(*rsa.PublicKey), pemBlock: block}, nil
 }
 
 type rsaSigner struct {

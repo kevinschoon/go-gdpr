@@ -91,13 +91,13 @@ func TestRsaSigner(t *testing.T) {
 		SubjectRequestId: "request-1234",
 	}
 	respRaw, _ := json.Marshal(resp)
-	signer, err := NewSigner(&SignerOptions{PrivateKey: keyPairOne[0]})
+	signer, err := NewSigner(&KeyOptions{KeyBytes: keyPairOne[0]})
 	assert.NoError(t, err)
 	sig, err := signer.Sign(respRaw)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedSig, sig)
 	// Change the underlying key
-	signer, err = NewSigner(&SignerOptions{PrivateKey: keyPairTwo[0]})
+	signer, err = NewSigner(&KeyOptions{KeyBytes: keyPairTwo[0]})
 	assert.NoError(t, err)
 	sig, err = signer.Sign(respRaw)
 	assert.NoError(t, err)
@@ -111,18 +111,18 @@ func TestRsaVerifier(t *testing.T) {
 		SubjectRequestId: "request-1234",
 	}
 	respRaw, _ := json.Marshal(resp)
-	verifier, err := NewVerifier(&VerifierOptions{PublicKey: keyPairOne[1]})
+	verifier, err := NewVerifier(&KeyOptions{KeyBytes: keyPairOne[1]})
 	assert.NoError(t, err)
 	err = verifier.Verify(respRaw, expectedSig)
 	assert.NoError(t, err)
-	verifier, err = NewVerifier(&VerifierOptions{PublicKey: keyPairTwo[1]})
+	verifier, err = NewVerifier(&KeyOptions{KeyBytes: keyPairTwo[1]})
 	assert.NoError(t, err)
 	err = verifier.Verify(respRaw, expectedSig)
 	assert.Error(t, err)
 }
 
 func TestSignerVerifier(t *testing.T) {
-	signer, err := NewSigner(&SignerOptions{PrivateKey: keyPairOne[0]})
+	signer, err := NewSigner(&KeyOptions{KeyBytes: keyPairOne[0]})
 	assert.NoError(t, err)
 	resp := &Response{
 		ControllerId:     "controller-1234",
@@ -131,7 +131,7 @@ func TestSignerVerifier(t *testing.T) {
 	respRaw, _ := json.Marshal(resp)
 	sig, err := signer.Sign(respRaw)
 	assert.NoError(t, err)
-	verifier, err := NewVerifier(&VerifierOptions{PublicKey: keyPairOne[1]})
+	verifier, err := NewVerifier(&KeyOptions{KeyBytes: keyPairOne[1]})
 	assert.NoError(t, err)
 	err = verifier.Verify(respRaw, sig)
 	assert.NoError(t, err)
@@ -143,8 +143,8 @@ func BenchmarkSignVerify(b *testing.B) {
 		SubjectRequestId: "request-1234",
 	}
 	respRaw, _ := json.Marshal(resp)
-	signer, _ := NewSigner(&SignerOptions{PrivateKey: keyPairOne[0]})
-	verifier, _ := NewVerifier(&VerifierOptions{PublicKey: keyPairOne[1]})
+	signer, _ := NewSigner(&KeyOptions{KeyBytes: keyPairOne[0]})
+	verifier, _ := NewVerifier(&KeyOptions{KeyBytes: keyPairOne[1]})
 	for n := 0; n < b.N; n++ {
 		sig, _ := signer.Sign(respRaw)
 		verifier.Verify(respRaw, sig)
