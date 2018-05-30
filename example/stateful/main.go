@@ -30,12 +30,12 @@ func main() {
 	if *migrate {
 		log.Println(db.Migrate())
 	}
-	signer, err := gdpr.NewSigner(&gdpr.SignerOptions{
-		PrivateKeyPath: *privateKeyPath,
+	signer, err := gdpr.NewSigner(&gdpr.KeyOptions{
+		KeyPath: *privateKeyPath,
 	})
 	maybe(err)
-	verifier, err := gdpr.NewVerifier(&gdpr.VerifierOptions{
-		PublicKeyPath: *publicKeyPath,
+	verifier, err := gdpr.NewVerifier(&gdpr.KeyOptions{
+		KeyPath: *publicKeyPath,
 	})
 	maybe(err)
 	// Run a Processor

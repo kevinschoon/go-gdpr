@@ -1,54 +1,52 @@
 package main
 
 import (
-	"log"
-	"sync"
-
-	"github.com/satori/go.uuid"
+	"fmt"
+	"net/http"
 
 	"github.com/greencase/go-gdpr"
 )
 
 type Controller struct {
-	mu        sync.RWMutex
-	client    *gdpr.Client
-	responses map[string]*gdpr.Response
+	shutdown chan bool
 }
 
-func (c *Controller) Callback(cb *gdpr.CallbackRequest) error {
-	log.Printf("received callback request for %s: %s\n", cb.SubjectRequestId, cb.RequestStatus)
-	if cb.RequestStatus == gdpr.STATUS_COMPLETED {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		delete(c.responses, cb.SubjectRequestId)
-	}
+func (c *Controller) Callback(req *gdpr.CallbackRequest) error {
+	// Process the callback..
+	fmt.Printf("CONTROLLER: got callback: %s:%s!\n", req.SubjectRequestId, req.RequestStatus)
+	go func() {
+		c.shutdown <- true
+	}()
 	return nil
 }
 
-// Request generates a random/fake GDPR request
-func (c *Controller) Request() error {
-	req := &gdpr.Request{
-		ApiVersion:       gdpr.ApiVersion,
-		SubjectRequestId: uuid.NewV4().String(),
+func main() {
+	controller := &Controller{shutdown: make(chan bool)}
+	server := gdpr.NewServer(&gdpr.ServerOptions{
+		Controller: controller,
+		Verifier:   gdpr.NoopVerifier{},
+	})
+	go http.ListenAndServe(":4001", server)
+	client := gdpr.NewClient(&gdpr.ClientOptions{
+		Endpoint: "http://localhost:4000",
+		Verifier: gdpr.NoopVerifier{},
+	})
+	_, err := client.Request(&gdpr.Request{
+		SubjectRequestId:   "request-1234",
+		SubjectRequestType: gdpr.SUBJECT_ACCESS,
 		SubjectIdentities: []gdpr.Identity{
 			gdpr.Identity{
 				Type:   gdpr.IDENTITY_EMAIL,
 				Format: gdpr.FORMAT_RAW,
-				Value:  "username@some-email.com",
+				Value:  "user@provider.com",
 			},
 		},
-		SubjectRequestType: gdpr.SUBJECT_ERASURE,
 		StatusCallbackUrls: []string{
 			"http://localhost:4001/opengdpr_callbacks",
 		},
-	}
-	resp, err := c.client.Request(req)
+	})
 	if err != nil {
-		return err
+		panic(fmt.Sprintf("request failed: %s", err))
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.responses[resp.SubjectRequestId] = resp
-	log.Printf("sent new gdpr request: %s", resp.SubjectRequestId)
-	return nil
+	<-controller.shutdown
 }
