@@ -27,5 +27,6 @@ _testmain.go
 
 example/stateful/gdpr.sqlite
 example/stateful/vendor
+example/stateful/*.pem
 
 
