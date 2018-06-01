@@ -91,6 +91,7 @@ type ServerOptions struct {
 // for route matching, in the future we might expand
 // this to support other mux and frameworks.
 type Server struct {
+	handlerFn       http.HandlerFunc
 	signer          Signer
 	verifier        Verifier
 	isProcessor     bool
@@ -181,7 +182,34 @@ func (s *Server) handle(fn Handler) httprouter.Handle {
 	}
 }
 
-func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.router.ServeHTTP(w, r) }
+func (s Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handlerFn(w, r) }
+
+// Before applys any http.HandlerFunc to the request before
+// sending it on to the controller/processor. Note that if a
+// handler incecepts the body of the request via request.Body
+// they must ensure it's contents are added back to request
+// or signature verification will fail!
+func (s *Server) Before(handlers ...http.HandlerFunc) {
+	original := s.handlerFn
+	s.handlerFn = func(w http.ResponseWriter, r *http.Request) {
+		for _, handler := range handlers {
+			handler(w, r)
+		}
+		original(w, r)
+	}
+}
+
+// After applys any http.HandlerFunc to the request after
+// it has been handled by the controller/processor.
+func (s *Server) After(handlers ...http.HandlerFunc) {
+	original := s.handlerFn
+	s.handlerFn = func(w http.ResponseWriter, r *http.Request) {
+		original(w, r)
+		for _, handler := range handlers {
+			handler(w, r)
+		}
+	}
+}
 
 // NewServer returns a server type that statisfies the
 // http.Handler interface.
@@ -206,7 +234,7 @@ func NewServer(opts *ServerOptions) *Server {
 			router.Handle(method, path, server.handle(builder(opts)))
 		}
 	}
-	server.router = router
+	server.handlerFn = router.ServeHTTP
 	return server
 }
 

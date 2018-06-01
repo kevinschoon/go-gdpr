@@ -60,6 +60,11 @@ func main() {
 				gdpr.SUBJECT_PORTABILITY,
 			},
 		})
+		// Log the signature generated from the response body which
+		// is sent to the controller for verification.
+		svr.After(func(w http.ResponseWriter, r *http.Request) {
+			log.Printf("signature=%s\n", w.Header().Get("X-OpenGDPR-Signature"))
+		})
 		go func() {
 			// Start the HTTP server in the background
 			log.Println("server listening @ :4000")
@@ -82,6 +87,11 @@ func main() {
 		svr := gdpr.NewServer(&gdpr.ServerOptions{
 			Verifier:   verifier,
 			Controller: contr,
+		})
+		// Log the signature generated from the processor which is present
+		// on each callback to the controller.
+		svr.Before(func(w http.ResponseWriter, r *http.Request) {
+			log.Printf("signature=%s\n", r.Header.Get("X-OpenGDPR-Signature"))
 		})
 		// Start the HTTP server in the background
 		go func() {
