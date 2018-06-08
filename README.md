@@ -6,8 +6,6 @@
 
 **Disclaimer: Using this library does not imply accordance with GDPR!**
 
-**Disclaimer1: This library is unfinshed and under active development!**
-
 ## Installation
 
 
